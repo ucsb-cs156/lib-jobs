@@ -37,7 +37,8 @@ Update the checklist above as phases complete.
   plugin, not spotless), jacoco 100% + pitest gates, prettier/eslint on
   frontend.
 - CI = thin callers into `ucsb-cs156/workflows@main` (same numbering as the
-  app repos); gh-pages docs site built from `docs-index/`. Tests run against
+  app repos); gh-pages docs site built from `frontend/docs-index/` (workflow
+  04 hardcodes that path — do not move it to the repo root). Tests run against
   the shipped Liquibase changelog (`db/migration/lib-jobs/`) with
   `ddl-auto=validate`, so entity/changelog drift fails `mvn test`.
 - Reference implementations to compare against live in the sibling checkouts,

@@ -255,7 +255,9 @@ Per consuming app:
   Maven). An Actions workflow on tag publishes the npm package.
 - **CI:** thin caller workflows into the org's shared reusable workflows
   (`ucsb-cs156/workflows@main`), same numbering as the app repos:
-  00 (all-checks-pass gate), 01/02 (gh-pages docs site from `docs-index/`),
+  00 (all-checks-pass gate), 01/02 (gh-pages docs site from
+  `frontend/docs-index/` — workflows 01/02 accept either location but 04
+  hardcodes `frontend/docs-index`, so it must live there),
   10 (JUnit 5 unit tests), 12 (jacoco, 100% gate in pom, report to gh-pages),
   13/14 (pitest incremental on PRs / full on main, `mutationThreshold=100`),
   15 (google-java-format via git-code-format-maven-plugin — the shared
