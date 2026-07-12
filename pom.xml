@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+    <relativePath />
+  </parent>
+
+  <!-- JitPack rewrites the groupId to com.github.ucsb-cs156 when consumers
+       depend on com.github.ucsb-cs156:lib-jobs:vX.Y.Z -->
+  <groupId>edu.ucsb.cs156</groupId>
+  <artifactId>lib-jobs</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>lib-jobs</name>
+  <description>Shared async jobs system for ucsb-cs156 course projects (Spring Boot starter)</description>
+  <url>https://github.com/ucsb-cs156/lib-jobs</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <java.version>21</java.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.swagger.core.v3</groupId>
+      <artifactId>swagger-annotations-jakarta</artifactId>
+      <version>2.2.28</version>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Activate the use of TCP to transmit events to the plugin
+               (see https://stackoverflow.com/a/61936537/13960329) -->
+          <forkNode
+            implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory" />
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>2.44.3</version>
+        <configuration>
+          <java>
+            <googleJavaFormat />
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <id>spotless-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.12</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>check</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <rule implementation="org.jacoco.maven.RuleConfiguration">
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit implementation="org.jacoco.report.check.Limit">
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit implementation="org.jacoco.report.check.Limit">
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit implementation="org.jacoco.report.check.Limit">
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit implementation="org.jacoco.report.check.Limit">
+                      <counter>CLASS</counter>
+                      <value>MISSEDCOUNT</value>
+                      <maximum>0</maximum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>1.17.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.1</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <historyInputFile>target/pit-history/history.bin</historyInputFile>
+          <historyOutputFile>target/pit-history/history.bin</historyOutputFile>
+          <targetClasses>
+            <param>edu.ucsb.cs156.jobs.*</param>
+          </targetClasses>
+          <targetTests>
+            <param>edu.ucsb.cs156.jobs.*</param>
+          </targetTests>
+          <!-- Config-class mutations always survive: Spring's test context cache
+               means @Bean methods don't re-run per mutation (same reason the app
+               repos exclude their config classes). Behavior is still covered by
+               jacoco (100%) and the JobsAutoConfiguration*Tests. -->
+          <excludedClasses>
+            <param>edu.ucsb.cs156.jobs.config.JobsAutoConfiguration</param>
+          </excludedClasses>
+          <mutationThreshold>100</mutationThreshold>
+          <outputFormats>
+            <outputFormat>HTML</outputFormat>
+            <outputFormat>CSV</outputFormat>
+            <outputFormat>XML</outputFormat>
+          </outputFormats>
+          <avoidCallsTo>
+            <avoidCallsTo>java.util.logging</avoidCallsTo>
+            <avoidCallsTo>org.apache.log4j</avoidCallsTo>
+            <avoidCallsTo>org.slf4j</avoidCallsTo>
+            <avoidCallsTo>org.apache.commons.logging</avoidCallsTo>
+          </avoidCallsTo>
+          <timestampedReports>false</timestampedReports>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

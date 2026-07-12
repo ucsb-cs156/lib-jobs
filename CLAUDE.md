@@ -9,19 +9,23 @@ to be installed fresh into proj-dining.
 
 **`docs/DESIGN.md` is the source of truth** for the architecture, the drift
 survey of the five app repos, all design decisions (User decoupling via
-`JobUserProvider`, frontiers `Course` decoupling via `metadata` column,
-auto-configuration contents), the publishing setup (JitPack for Maven,
-npmjs for `@ucsb-cs156/jobs-components`), the phased rollout plan, and the
-open questions awaiting Phill's decisions (§7). Do not re-derive any of that;
-start from the doc and update it when decisions change.
+`JobUserProvider`, job scoping via `scopeType`/`scopeId` columns generalizing
+frontiers' `Course` link, auto-configuration contents), the publishing setup
+(JitPack for Maven, npmjs for `@ucsb-cs156/jobs-components`), the phased
+rollout plan, and the resolved §7 decisions (all settled with Phill
+2026-07-12). Do not re-derive any of that; start from the doc and update it
+when decisions change.
 
 ## Current status
 
-- [x] Phase 0 (partially): design doc drafted, awaiting Phill's review of §7 open questions
+- [x] Phase 0: design reviewed; all §7 questions resolved with Phill 2026-07-12
+      (headline: frontiers' Course link generalizes into library `scopeType`/`scopeId`
+      columns, DESIGN.md §3.4; MIT license; Phill creating the npm org)
 - [ ] Phase 1: build backend library here (root `pom.xml`, package `edu.ucsb.cs156.jobs`), full jacoco+pitest coverage, tag v0.1.0
-- [ ] Phase 2: migration pilot in proj-scaffold
-- [ ] Phase 3: installation pilot in proj-dining (backend)
-- [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — Course coupling)
+      — code complete 2026-07-12 (45 tests, jacoco 100%, pitest 100% w/ autoconfig excluded); awaiting Phill's review, commit, and tag
+- [ ] Phase 2: installation pilot in proj-dining (backend)
+- [ ] Phase 3: migration pilot in proj-scaffold
+- [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.

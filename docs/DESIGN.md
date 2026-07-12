@@ -1,6 +1,6 @@
 # lib-jobs: Shared Async Jobs System for ucsb-cs156 Projects
 
-**Status:** Draft for review (Phill Conrad)
+**Status:** §7 open questions resolved with Phill 2026-07-12; phase 1 underway
 **Date:** 2026-07-12
 **Origin:** Claude Code session in proj-courses, 2026-07-11/12, analyzing the
 homegrown jobs system vs. Spring Batch and then vs. extraction into a shared library.
@@ -38,7 +38,7 @@ implementation, and (frontend) a route registration.
   build via a factory bean, launch from a controller or `@Scheduled` method.
 - Adoption in a fresh repo = 1 dependency + properties + 1 interface impl.
 - Union of the best features currently scattered across the forks
-  (transaction wrapping, `jobName`, pagination, rate limiting).
+  (transaction wrapping, `jobName`, pagination, rate limiting, job scoping).
 
 **Non-goals**
 - Not a batch-processing framework: no chunking, no restart-from-checkpoint,
@@ -73,9 +73,9 @@ All under `edu.ucsb.cs156.jobs`:
 
 | Class | Role | Source of truth for behavior |
 |---|---|---|
-| `Job` (entity, table `jobs`) | id, `createdById` (Long), `createdByEmail` (String), `jobName`, `status`, `log` (TEXT), `createdAt`, `updatedAt`, `metadata` (nullable TEXT) | union; see §3.3, §3.4 |
-| `JobsRepository` | `JpaRepository<Job, Long>` + `findAllByOrderByIdDesc()` + paging | courses |
-| `JobContextConsumer` | `void accept(JobContext c) throws Exception`; `default String getJobName()` → simple class name; `default String getMetadata()` → null | frontiers (generalized) |
+| `Job` (entity, table `jobs`) | id, `createdById` (Long), `createdByEmail` (String), `jobName`, `status`, `log` (TEXT), `createdAt`, `updatedAt`, `scopeType` (nullable String), `scopeId` (nullable Long) | union; see §3.3, §3.4 |
+| `JobsRepository` | `JpaRepository<Job, Long>` + `findAllByOrderByIdDesc()` + paging + `findByScopeTypeAndScopeIdOrderByIdDesc(String, Long)` + `deleteByScopeTypeAndScopeId(String, Long)` | courses + §3.4 |
+| `JobContextConsumer` | `void accept(JobContext c) throws Exception`; `default String getJobName()` → simple class name; `default String getScopeType()` / `default Long getScopeId()` → null | frontiers (generalized) |
 | `JobContext` | `log(String)` appends to `job.log` and saves | identical everywhere |
 | `JobContextFactory` | creates `JobContext` (exists for test seams) | courses/frontiers/scaffold |
 | `JobService` | `runAsJob(...)` creates entity then calls `self.runJobAsync(...)`; async method wraps job body in `TransactionTemplate` | **frontiers** (most correct: keeps Hibernate session open, all-or-nothing DB semantics for the job body while still persisting job metadata on failure) |
@@ -105,41 +105,92 @@ Migration note: keep the column name `created_by_id` so existing data survives;
 drop the FK constraint; `created_by_email` is nullable and stays blank for
 historical rows (UI must tolerate null).
 
-### 3.4 Decoupling from frontiers' `Course`
+### 3.4 Job scoping (generalizing frontiers' `Course` link)
 
-proj-frontiers added `default Course getCourse()` to `JobContextConsumer` and a
-`@ManyToOne Course course` on `Job`, used to filter the jobs table per course
-(`JobTabComponent`). The library cannot know about `Course`.
+**Decision (Phill, 2026-07-12):** promote frontiers' per-course jobs feature
+into the library as generic **scope columns**, decoupled from any entity. This
+supersedes both options drafted earlier (`metadata` JSON column; app-level side
+table) — rationale at the end of this section.
 
-**Recommended:** a nullable free-form `metadata` TEXT column on `Job`, populated
-from `JobContextConsumer.getMetadata()` (frontiers returns e.g.
-`{"courseId": 17}`). Frontiers filters client-side or via a `LIKE` query in its
-own app-level repository fragment. Scale (hundreds of rows) makes JSON-blob
-querying a non-issue.
+What frontiers has today: `@ManyToOne Course course` on `Job`,
+`default Course getCourse()` on `JobContextConsumer`, a
+`GET /api/jobs/course?courseId=` endpoint guarded by
+`@CourseSecurity.hasManagePermissions` (course *staff*, not just admins, can
+watch their course's jobs in `JobTabComponent`), and
+`deleteByCourse_Id` cleanup when a course is deleted. Generalized, the feature
+is: *a job may belong to one app-domain object, and the app may expose scoped
+listing under its own authorization rule.*
 
-**Alternative (if metadata feels too loose):** frontiers keeps an app-level side
-table `job_courses(job_id, course_id)` written by its own wrapper around
-`runAsJob`. Cleaner relationally, more moving parts.
+Library design:
 
-**Open question for Phill / frontiers maintainers:** which of the two. Design
-proceeds with `metadata` unless vetoed.
+- `Job.scopeType` (nullable String) + `Job.scopeId` (nullable Long) — plain
+  columns, no FK; both null for unscoped jobs (the only kind the other four
+  apps have today).
+- `JobContextConsumer` gains `default String getScopeType()` and
+  `default Long getScopeId()` (both null); `JobService.runAsJob` copies them
+  onto the entity at launch. Launch endpoints that know the scope at request
+  time set them via the job builder as frontiers does today.
+- `JobsRepository` ships `findByScopeTypeAndScopeIdOrderByIdDesc` and
+  `deleteByScopeTypeAndScopeId`.
+- **Scoped endpoints stay app-level** because the authorization rule is
+  app-specific (frontiers: `@CourseSecurity`); the library's own endpoints
+  remain `ROLE_ADMIN`. Frontiers' endpoint becomes a one-liner over the
+  library repository method with `scopeType = "course"`.
+
+Frontiers migration (phase 6): set `scope_type = 'course'`,
+`scope_id = course_id` for existing rows; drop the FK and the `course_id`
+column; replace `deleteByCourse_Id` call sites with
+`deleteByScopeTypeAndScopeId("course", id)`. Only losses vs. today: the DB-level
+FK integrity check (the delete was already an explicit repository call, not a
+cascade), and jobs no longer serialize a nested `course` object (frontend reads
+`scopeId` instead).
+
+Why not the `metadata` JSON column: querying a TEXT blob portably across H2
+(dev) and Postgres (prod) degenerates to unindexed `LIKE` string-matching that
+is easy to get subtly wrong (a naive pattern for `"courseId": 17` also matches
+`171`), and course-delete cleanup would ride on the same fragile match. Why not
+an app-level side table: real FKs, but the most app-side machinery (a wrapper
+around `runAsJob`, join queries), and no other app gains the capability. Scope
+columns keep frontiers' indexed equality queries and give all five apps the
+same feature for free.
 
 ### 3.5 Auto-configuration (the "starter" part)
 
 `JobsAutoConfiguration`, registered in
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
 
-- `@EntityScan("edu.ucsb.cs156.jobs")` + `@EnableJpaRepositories("edu.ucsb.cs156.jobs")`
-  (scoped to library packages only, so the app's own scanning is untouched).
-- `@ComponentScan` (or explicit `@Bean`s) for `JobService`, `JobsController`,
-  `JobContextFactory`, `JobRateLimit`.
+- **Entity/repository discovery** (corrected during phase 1): the library uses
+  `@AutoConfigurationPackage(basePackages = "edu.ucsb.cs156.jobs")`, which
+  *adds* the library package to Spring Boot's default entity + Spring Data
+  scanning. The originally drafted `@EntityScan`/`@EnableJpaRepositories` would
+  have *replaced* the defaults and broken every consuming app's own entities
+  and repositories (none of the five apps declares those annotations; verified
+  2026-07-12).
+- Explicit `@Bean`s (not `@ComponentScan`) for `JobService`, `JobsController`,
+  `JobContextFactory`, `JobRateLimit`, each `@ConditionalOnMissingBean` so an
+  app can override any piece.
 - `@EnableAsync` + `@EnableScheduling`.
-- Beans: `ThreadPoolTaskExecutor` named **`jobsExecutor`** (properties
-  `app.jobs.core-pool-size`, `app.jobs.max-pool-size`, `app.jobs.queue-capacity`,
-  with sensible defaults) wrapped in `DelegatingSecurityContextAsyncTaskExecutor`
-  so the launching admin's security context propagates. `JobService` uses
-  `@Async("jobsExecutor")`.
-- All beans `@ConditionalOnMissingBean` so an app can override any piece.
+- `jobsExecutor`: `ThreadPoolTaskExecutor` (properties `app.jobs.core-pool-size`,
+  `app.jobs.max-pool-size`, `app.jobs.queue-capacity`) wrapped in
+  `DelegatingSecurityContextAsyncTaskExecutor` so the launching admin's
+  security context propagates. `JobService` uses `@Async("jobsExecutor")`.
+  Defaults adopt scaffold's deliberate choice: **one thread, unbounded FIFO
+  queue** — jobs run strictly one at a time in submission order, preventing
+  concurrent-job races; apps wanting concurrency raise the pool sizes.
+
+Implementation notes (phase 1):
+
+- `Job` timestamps use JPA lifecycle callbacks (`@PrePersist`/`@PreUpdate`)
+  instead of Spring Data auditing, avoiding any interaction with the apps'
+  `@EnableJpaAuditing` configs.
+- The apps' 404/400 exception mapping lives in an app-level abstract
+  `ApiController`; the library controller can't extend that, so it carries its
+  own `@ExceptionHandler`s (plus its own `errors.EntityNotFoundException`)
+  producing the same `{type, message}` response shape.
+- pitest excludes `JobsAutoConfiguration` (Spring's test-context cache means
+  `@Bean`-method mutations never re-execute — same reason the app repos
+  exclude their config classes); everything else is at 100% mutation kill and
+  the pom enforces `mutationThreshold=100`.
 
 Consequence for consumers: apps **delete** their `@EnableAsync`,
 `@EnableScheduling`, and executor bean definitions from the application class
@@ -164,13 +215,13 @@ reference implementation.
 ### 3.7 Schema migration (per consuming app)
 
 The apps use Hibernate `ddl-auto` in the usual org configuration, so *added*
-columns (`job_name`, `created_by_email`, `metadata`) appear automatically.
-Manual steps per app:
+columns (`job_name`, `created_by_email`, `scope_type`, `scope_id`) appear
+automatically. Manual steps per app:
 
 1. Drop the FK constraint on `jobs.created_by_id` (one SQL statement on prod
    Postgres via dokku; H2 dev databases just get recreated).
-2. Frontiers only: migrate `jobs.course_id` data into `metadata` (or the side
-   table), then drop the column.
+2. Frontiers only: `UPDATE jobs SET scope_type='course', scope_id=course_id`,
+   then drop the FK and the `course_id` column (§3.4).
 3. No backfill of `created_by_email` (nullable; UI tolerates null).
 
 ## 4. Versioning, publishing, CI
@@ -182,8 +233,19 @@ Manual steps per app:
   `npm test` + coverage; formatting checks matching org conventions
   (spotless google-java-format / prettier + eslint).
 - **npm:** package `@ucsb-cs156/jobs-components`, published to npmjs.com
-  (public scoped packages are free; consumers need no auth). Requires creating
-  the `ucsb-cs156` npm org once and adding an `NPM_TOKEN` repo secret.
+  (public scoped packages are free; consumers need no auth). One-time setup:
+  1. Create/log in to an npmjs.com account (enable 2FA).
+  2. Avatar menu → **Add Organization** → name `ucsb-cs156` → choose the free
+     "Unlimited public packages" plan. (This also reserves the `@ucsb-cs156`
+     scope.)
+  3. Publish credentials — defer to phase 7: since npm's 2025 supply-chain
+     hardening, write-capable granular tokens are short-lived (90-day max), so
+     a set-and-forget `NPM_TOKEN` secret is no longer practical. Preferred:
+     npm **trusted publishing** (OIDC from GitHub Actions, no long-lived
+     secret), configured on the package after an initial manual
+     `npm publish --access public` from a maintainer's machine. Note `--access
+     public` is required on first publish — scoped packages default to
+     restricted.
 - **Consumers:** enable Dependabot for Maven + npm so version bumps arrive as PRs.
 - **Compatibility policy:** semver; breaking API changes bump major and the
   rollout to five repos is coordinated. Keep the API surface minimal to make
@@ -197,14 +259,20 @@ Each phase gates the next.
 |---|---|---|
 | 0 | This design reviewed by Phill; open questions (§7) resolved | design |
 | 1 | Build backend library in this repo, full tests, tag `v0.1.0` | it builds & tests |
-| 2 | **Migration pilot: proj-scaffold.** Add dependency, delete core files + their tests, implement `JobUserProvider`, rename executor, schema step, verify admin UI still works against library controller | existing apps can migrate |
-| 3 | **Installation pilot: proj-dining.** Add dependency + properties + `JobUserProvider` + one `TestJob` + launch endpoint; backend only until phase 6 | greenfield adoption is 1-dependency easy; exercises fresh schema creation |
+| 2 | **Installation pilot: proj-dining.** Add dependency + properties + `JobUserProvider` + one `TestJob` + launch endpoint; backend only until phase 7 | greenfield adoption is 1-dependency easy; exercises fresh schema creation |
+| 3 | **Migration pilot: proj-scaffold.** Add dependency, delete core files + their tests, implement `JobUserProvider`, rename executor, schema step, verify admin UI still works against library controller | existing apps can migrate |
 | 4 | proj-courses (keeps `JobRateLimit` usage; largest launch-endpoint surface) | |
 | 5 | proj-happycows (oldest fork; also adopts pagination) | |
-| 6 | proj-frontiers (needs the `Course`→`metadata` migration) — do last | the escape hatch works |
+| 6 | proj-frontiers (needs the `Course`→scope-columns migration, §3.4) — do last | the scoping generalization works |
 | 7 | Frontend package `@ucsb-cs156/jobs-components`; pilot in dining (no existing UI) then roll out | see §6 |
 
-Per-repo migration checklist (phases 2, 4–6):
+Ordering rationale (Phill, 2026-07-12): dining — the acid test for
+1-dependency adoption — comes immediately after the library builds; then
+migrate existing apps easiest-first: scaffold (closest to the library shape),
+courses (pagination + rate limit), happycows (oldest drift), frontiers last
+(scope migration).
+
+Per-repo migration checklist (phases 3–6):
 
 - [ ] Add JitPack repo + dependency to `pom.xml`
 - [ ] Delete `services/jobs/*`, `entities/**/Job.java`, `repositories/**/JobsRepository.java`,
@@ -242,20 +310,23 @@ and pages use each app's `useBackend`. Options:
 Peer dependencies to align across the five apps before publishing: react,
 react-bootstrap, react-router-dom, react-query flavor/version. Audit needed.
 
-## 7. Open questions (need Phill's call before/during phase 1)
+## 7. Open questions — RESOLVED (Phill, 2026-07-12)
 
-1. **Frontiers `Course` coupling:** `metadata` JSON column (recommended) or
-   app-level side table? (§3.4)
-2. **Repo/package naming:** repo `lib-jobs`; Maven `com.github.ucsb-cs156:lib-jobs`
-   (forced by JitPack); npm `@ucsb-cs156/jobs-components`. OK?
-3. **License:** MIT to match the app repos?
-4. **npm org:** does `ucsb-cs156` exist on npmjs.com / who creates it + token?
-5. **Executor rename:** OK to standardize on `jobsExecutor` (scaffold currently
-   uses `jobExecutor`)?
-6. **`getLongJob` vs `getJobLogs`:** the forks disagree on the method/endpoint
-   name for long logs; library standardizes on `getJobLogs` + `/api/jobs/logs/{id}`.
-7. Should `JobRateLimit` require its property (`app.jobs.rate-limit-ms`) or
-   default silently to 200ms? (Courses currently warns-and-defaults on bad values.)
+1. **Frontiers `Course` coupling:** neither drafted option — generalized
+   **scope columns** (`scopeType`/`scopeId`) in the library instead; see §3.4.
+2. **Repo/package naming:** confirmed as drafted (`lib-jobs`,
+   `com.github.ucsb-cs156:lib-jobs`, `@ucsb-cs156/jobs-components`).
+3. **License:** MIT. (Survey correction: none of the five app repos actually
+   has a LICENSE file, so there was no org convention to match; the library
+   needs an explicit license to be publicly consumable.)
+4. **npm org:** confirmed it does not exist (the `@ucsb-cs156` scope has zero
+   packages); Phill is creating it — see §4 for the steps. Publish credentials
+   deferred to phase 7 (see the token-lifetime note in §4).
+5. **Executor rename:** confirmed — standardize on `jobsExecutor`; scaffold
+   renames during its migration.
+6. **Logs endpoint:** confirmed — `getJobLogs` + `GET /api/jobs/logs/{id}`.
+7. **`JobRateLimit`:** property optional; default 200 ms, warn-and-default on
+   unparseable values (matches courses' behavior).
 
 ## Appendix A: Drift survey (as of 2026-07-12, all repos' `main`)
 
