@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JobsController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">lib-jobs</a> &gt; <a href="index.source.html" class="el_package">edu.ucsb.cs156.jobs.controllers</a> &gt; <span class="el_source">JobsController.java</span></div><h1>JobsController.java</h1><pre class="source lang-java linenums">package edu.ucsb.cs156.jobs.controllers;
+
+import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
+import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import edu.ucsb.cs156.jobs.services.JobService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort.Direction;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Admin REST API for job records: list (all or paginated), fetch one, fetch logs, delete one or
+ * all. Launch endpoints stay in each app's own controllers. Requires {@code ROLE_ADMIN}, which
+ * consuming apps must support via method security ({@code @EnableMethodSecurity}).
+ */
+@Tag(name = &quot;Jobs&quot;)
+@RequestMapping(&quot;/api/jobs&quot;)
+@RestController
+<span class="fc" id="L37">@Slf4j</span>
+<span class="fc" id="L38">public class JobsController {</span>
+<span class="fc" id="L39">  public static final List&lt;String&gt; ALLOWED_SORT_FIELDS =</span>
+<span class="fc" id="L40">      Arrays.asList(&quot;id&quot;, &quot;jobName&quot;, &quot;status&quot;, &quot;createdByEmail&quot;, &quot;createdAt&quot;, &quot;updatedAt&quot;);</span>
+
+  @Autowired private JobsRepository jobsRepository;
+
+  @Autowired private JobService jobService;
+
+  @Operation(summary = &quot;List all jobs&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @GetMapping(&quot;/all&quot;)
+  public Iterable&lt;Job&gt; allJobs() {
+<span class="fc" id="L50">    return jobsRepository.findAllByOrderByIdDesc();</span>
+  }
+
+  @Operation(summary = &quot;Get paginated jobs&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @GetMapping(value = &quot;/paginated&quot;, produces = &quot;application/json&quot;)
+  public Page&lt;Job&gt; paginatedJobs(
+      @Parameter(name = &quot;page&quot;, description = &quot;what page of the data&quot;, example = &quot;0&quot;) @RequestParam
+          int page,
+      @Parameter(name = &quot;pageSize&quot;, description = &quot;size of each page&quot;, example = &quot;10&quot;) @RequestParam
+          int pageSize,
+      @Parameter(name = &quot;sortField&quot;, description = &quot;sort field&quot;, example = &quot;createdAt&quot;)
+          @RequestParam(defaultValue = &quot;status&quot;)
+          String sortField,
+      @Parameter(name = &quot;sortDirection&quot;, description = &quot;sort direction&quot;, example = &quot;ASC&quot;)
+          @RequestParam(defaultValue = &quot;DESC&quot;)
+          String sortDirection) {
+
+<span class="fc bfc" id="L68" title="All 2 branches covered.">    if (!ALLOWED_SORT_FIELDS.contains(sortField)) {</span>
+<span class="fc" id="L69">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L70">          String.format(</span>
+              &quot;%s is not a valid sort field. Valid values are %s&quot;, sortField, ALLOWED_SORT_FIELDS));
+    }
+
+<span class="fc" id="L74">    List&lt;String&gt; allowedSortDirections = Arrays.asList(&quot;ASC&quot;, &quot;DESC&quot;);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">    if (!allowedSortDirections.contains(sortDirection)) {</span>
+<span class="fc" id="L76">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L77">          String.format(</span>
+              &quot;%s is not a valid sort direction. Valid values are %s&quot;,
+              sortDirection, allowedSortDirections));
+    }
+
+<span class="fc" id="L82">    Direction sortDirectionObject = Direction.DESC;</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">    if (sortDirection.equals(&quot;ASC&quot;)) {</span>
+<span class="fc" id="L84">      sortDirectionObject = Direction.ASC;</span>
+    }
+
+<span class="fc" id="L87">    PageRequest pageRequest = PageRequest.of(page, pageSize, sortDirectionObject, sortField);</span>
+<span class="fc" id="L88">    return jobsRepository.findAll(pageRequest);</span>
+  }
+
+  @Operation(summary = &quot;Get a specific job by ID if it is in the database&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @GetMapping(&quot;&quot;)
+  public Job getJobById(
+      @Parameter(name = &quot;id&quot;, description = &quot;ID of the job&quot;) @RequestParam Long id) {
+<span class="fc" id="L96">    return jobsRepository</span>
+<span class="fc" id="L97">        .findById(id)</span>
+<span class="fc" id="L98">        .orElseThrow(() -&gt; new EntityNotFoundException(Job.class, id));</span>
+  }
+
+  @Operation(summary = &quot;Get long job logs&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @GetMapping(&quot;/logs/{id}&quot;)
+  public String getJobLogs(@Parameter(name = &quot;id&quot;, description = &quot;Job ID&quot;) @PathVariable Long id) {
+<span class="fc" id="L105">    return jobService.getJobLogs(id);</span>
+  }
+
+  @Operation(summary = &quot;Delete specific job record&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @DeleteMapping(&quot;&quot;)
+  public Map&lt;String, String&gt; deleteJob(@Parameter(name = &quot;id&quot;) @RequestParam Long id) {
+<span class="fc bfc" id="L112" title="All 2 branches covered.">    if (!jobsRepository.existsById(id)) {</span>
+<span class="fc" id="L113">      return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d not found&quot;, id));</span>
+    }
+<span class="fc" id="L115">    jobsRepository.deleteById(id);</span>
+<span class="fc" id="L116">    return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d deleted&quot;, id));</span>
+  }
+
+  @Operation(summary = &quot;Delete all job records&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @DeleteMapping(&quot;/all&quot;)
+  public Map&lt;String, String&gt; deleteAllJobs() {
+<span class="fc" id="L123">    jobsRepository.deleteAll();</span>
+<span class="fc" id="L124">    return Map.of(&quot;message&quot;, &quot;All jobs deleted&quot;);</span>
+  }
+
+  /**
+   * The apps map these exceptions in an app-level base controller; the library controller cannot
+   * extend that, so it carries its own handlers with the same response shape.
+   */
+  @ExceptionHandler({EntityNotFoundException.class})
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public Object handleEntityNotFoundException(Throwable e) {
+<span class="fc" id="L134">    return Map.of(</span>
+<span class="fc" id="L135">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
+<span class="fc" id="L136">        &quot;message&quot;, e.getMessage());</span>
+  }
+
+  @ExceptionHandler({IllegalArgumentException.class})
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public Object handleIllegalArgument(Throwable e) {
+<span class="fc" id="L142">    return Map.of(</span>
+<span class="fc" id="L143">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
+<span class="fc" id="L144">        &quot;message&quot;, e.getMessage());</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
