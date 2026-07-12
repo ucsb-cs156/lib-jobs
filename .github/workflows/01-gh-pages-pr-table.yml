@@ -1,0 +1,27 @@
+# This workflow updates the open PRs in
+# _config.yml each time a pull request is made
+# or there is a push to main.  It does not handle
+# the rebuild of the javadoc; that's handled
+# separately based on which files were modified.
+
+name: "01-gh-pages-pr-table: Rebuild table of PRs"
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: read
+
+jobs:
+  call-workflow-passing-data:
+    uses: ucsb-cs156/workflows/.github/workflows/01-gh-pages-pr-table.yml@main
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

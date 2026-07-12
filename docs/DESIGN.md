@@ -214,24 +214,62 @@ reference implementation.
 
 ### 3.7 Schema migration (per consuming app)
 
-The apps use Hibernate `ddl-auto` in the usual org configuration, so *added*
-columns (`job_name`, `created_by_email`, `scope_type`, `scope_id`) appear
-automatically. Manual steps per app:
+**Survey correction (2026-07-12, while setting up CI):** frontiers, scaffold,
+and happycows manage schema with **Liquibase** (JSON changelogs under
+`src/main/resources/db/migration/changes/`, checked in CI by workflow
+`18-validate-db-schema`, which boots the app with `ddl-auto=validate`);
+courses and dining still rely on Hibernate `ddl-auto`. The original draft of
+this section assumed `ddl-auto` everywhere.
 
-1. Drop the FK constraint on `jobs.created_by_id` (one SQL statement on prod
-   Postgres via dokku; H2 dev databases just get recreated).
-2. Frontiers only: `UPDATE jobs SET scope_type='course', scope_id=course_id`,
-   then drop the FK and the `course_id` column (§3.4).
-3. No backfill of `created_by_email` (nullable; UI tolerates null).
+The library therefore ships its canonical schema as a Liquibase changelog
+**inside the jar**: `db/migration/lib-jobs/changelog-master.json` (which
+includes `db/migration/lib-jobs/changes/001-create-jobs-table.json`, creating
+the `jobs` table with all columns, types mirroring frontiers'
+`000-init-database.json`). The library's own tests run against that changelog
+with `ddl-auto=validate`, so any drift between the `Job` entity and the
+changelog fails the library's build — the migration is continuously sanity
+checked at the source.
+
+Per consuming app:
+
+1. **Fresh installs (dining), Liquibase flavor:** add one include to the app's
+   master changelog —
+   `{"include": {"file": "db/migration/lib-jobs/changelog-master.json"}}` —
+   resolved from the library jar via the classpath. Future library schema
+   changesets arrive automatically with version bumps.
+2. **Liquibase apps with an existing `jobs` table (frontiers, scaffold,
+   happycows):** do *not* include the library changelog (the table already
+   exists). Write app-level changesets instead: add the missing columns
+   (`job_name`, `created_by_email`, `scope_type`, `scope_id` as applicable),
+   drop the FK on `created_by_id`; frontiers additionally
+   `UPDATE jobs SET scope_type='course', scope_id=course_id`, then drops the
+   FK and `course_id` (§3.4).
+3. **`ddl-auto` apps (courses):** added columns appear automatically; drop the
+   FK constraint on `jobs.created_by_id` manually on prod Postgres (dokku).
+4. No backfill of `created_by_email` (nullable; UI tolerates null).
 
 ## 4. Versioning, publishing, CI
 
 - **Releases:** git tag `vX.Y.Z` on `main` → GitHub Release. JitPack builds the
   Maven artifact on first request of that tag (no publish workflow needed for
   Maven). An Actions workflow on tag publishes the npm package.
-- **CI on PR:** backend `mvn test` + jacoco check + pitest; frontend
-  `npm test` + coverage; formatting checks matching org conventions
-  (spotless google-java-format / prettier + eslint).
+- **CI:** thin caller workflows into the org's shared reusable workflows
+  (`ucsb-cs156/workflows@main`), same numbering as the app repos:
+  00 (all-checks-pass gate), 01/02 (gh-pages docs site from `docs-index/`),
+  10 (JUnit 5 unit tests), 12 (jacoco, 100% gate in pom, report to gh-pages),
+  13/14 (pitest incremental on PRs / full on main, `mutationThreshold=100`),
+  15 (google-java-format via git-code-format-maven-plugin — the shared
+  workflow requires this plugin, so the library uses it rather than spotless),
+  18 (db-schema validation: boots the src/test `TestApplication` with
+  `ddl-auto=validate` against the shipped Liquibase changelog), 56/58
+  (javadoc for main/PRs to gh-pages). Shared-workflow requirements the repo
+  satisfies: `.java-version` file, `.mvn/jvm.config` with the
+  `--add-exports jdk.compiler/...` flags google-java-format needs, and a
+  `spring-boot-maven-plugin` config that can boot the test app
+  (`useTestClasspath` + test-classes on the classpath) while skipping
+  `repackage` so the artifact stays a plain library jar. Setup after first
+  push: enable GitHub Pages from the `gh-pages` branch, run
+  `02-gh-pages-rebuild` once, and add `enforce` to required checks.
 - **npm:** package `@ucsb-cs156/jobs-components`, published to npmjs.com
   (public scoped packages are free; consumers need no auth). One-time setup:
   1. Create/log in to an npmjs.com account (enable 2FA).

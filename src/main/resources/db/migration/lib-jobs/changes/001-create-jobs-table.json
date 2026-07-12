@@ -1,0 +1,85 @@
+{
+  "databaseChangeLog": [
+    {
+      "changeSet": {
+        "id": "lib-jobs-001-create-jobs-table",
+        "author": "lib-jobs",
+        "changes": [
+          {
+            "createTable": {
+              "tableName": "JOBS",
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "JOB_PK"
+                    },
+                    "name": "ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY_EMAIL",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "JOB_NAME",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "STATUS",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "SCOPE_TYPE",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "SCOPE_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "LOG",
+                    "type": "VARCHAR(1048576)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+name: "56-javadoc-main-branch: Update javadoc when main branch changes"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  call-javadoc-main:
+    uses: ucsb-cs156/workflows/.github/workflows/56-javadoc-main-branch.yml@main
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

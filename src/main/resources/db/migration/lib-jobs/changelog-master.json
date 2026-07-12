@@ -1,0 +1,5 @@
+{ "databaseChangeLog": [
+    {
+        "include": {"file": "db/migration/lib-jobs/changes/001-create-jobs-table.json"}
+    }
+]}

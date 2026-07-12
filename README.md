@@ -70,6 +70,17 @@ time in submission order). Delete any `@EnableAsync`/`@EnableScheduling`/
 executor-bean configuration from the application class — the library provides
 them.
 
+**Schema:** apps using Liquibase add one include to their master changelog
+(the changelog ships inside the jar):
+
+```json
+{"include": {"file": "db/migration/lib-jobs/changelog-master.json"}}
+```
+
+Apps using Hibernate `ddl-auto` need nothing. Apps migrating an *existing*
+`jobs` table should write their own alter-table changesets instead — see
+DESIGN.md §3.7.
+
 ## Writing a job
 
 ```java
@@ -116,10 +127,18 @@ name `jobsExecutor`) in the app.
 ## Development
 
 ```bash
-mvn test                                  # tests + jacoco (100% required)
-mvn verify                                # + spotless format check
-mvn spotless:apply                        # fix formatting
-mvn org.pitest:pitest-maven:mutationCoverage   # mutation tests (100% required)
+mvn test                        # tests + jacoco (100% required); runs against
+                                # the shipped Liquibase changelog with
+                                # ddl-auto=validate (schema drift fails fast)
+mvn verify                      # + jacoco check + format check
+mvn git-code-format:format-code # fix formatting (google-java-format)
+mvn pitest:mutationCoverage     # mutation tests (100% required)
+mvn spring-boot:run             # boot the src/test TestApplication
 ```
+
+CI uses the org's shared reusable workflows
+([ucsb-cs156/workflows](https://github.com/ucsb-cs156/workflows)) with the
+same numbering as the app repos; javadoc, jacoco, and pitest reports publish
+to the gh-pages site at <https://ucsb-cs156.github.io/lib-jobs>.
 
 Releases: tag `vX.Y.Z` on `main`; JitPack builds the Maven artifact on demand.

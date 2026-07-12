@@ -33,7 +33,13 @@ Update the checklist above as phases complete.
 ## Conventions
 
 - Mirror the org's app-repo conventions: Spring Boot 3.x, google-java-format
-  (spotless), jacoco 100% + pitest gates, prettier/eslint on frontend.
+  via git-code-format-maven-plugin (the shared format workflow requires that
+  plugin, not spotless), jacoco 100% + pitest gates, prettier/eslint on
+  frontend.
+- CI = thin callers into `ucsb-cs156/workflows@main` (same numbering as the
+  app repos); gh-pages docs site built from `docs-index/`. Tests run against
+  the shipped Liquibase changelog (`db/migration/lib-jobs/`) with
+  `ddl-auto=validate`, so entity/changelog drift fails `mvn test`.
 - Reference implementations to compare against live in the sibling checkouts,
   e.g. `~/github/ucsb-cs156/proj-courses` (and the other app repos on GitHub
   under ucsb-cs156). The most evolved backend core to seed from is

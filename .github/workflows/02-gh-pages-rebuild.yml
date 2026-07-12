@@ -1,0 +1,41 @@
+# Rebuilds the entire gh-pages documentation site on demand.
+# This repo is backend-only (no frontend yet), so FRONTEND is false.
+
+name: "02-gh-pages-rebuild: Rebuild gh-pages site"
+
+on:
+  workflow_dispatch:
+    inputs:
+      reset:
+        type: boolean
+        description: full reset of site?
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: read
+
+jobs:
+  call-workflow-02:
+    # Directly invoke the reusable workflow
+    uses: ucsb-cs156/workflows/.github/workflows/02-gh-pages-rebuild.yml@main
+    with:
+      JAVA_DISTRIBUTION: ${{ vars.JAVA_DISTRIBUTION || 'temurin' }}
+      TIMEOUT_PITEST: 30
+      FRONTEND: false
+      RESET_GH_PAGES: ${{ inputs.reset }}
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+
+  call-another-reusable-workflow:
+    needs: call-workflow-02
+    # Conditional execution if the previous workflow completes successfully
+    if: ${{ needs.call-workflow-02.result == 'success' }}
+    uses: ucsb-cs156/workflows/.github/workflows/04-gh-pages-rebuild-part-2.yml@main
+    with:
+      JAVA_DISTRIBUTION: ${{ vars.JAVA_DISTRIBUTION || 'temurin' }}
+      FRONTEND: false
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -62,6 +62,15 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- The library's own tests run against the schema created by the shipped
+         Liquibase changelog (db/migration/lib-jobs), with ddl-auto=validate,
+         so entity/changelog drift fails the build. Consuming apps bring their
+         own Liquibase; this dependency is test-only. -->
+    <dependency>
+      <groupId>org.liquibase</groupId>
+      <artifactId>liquibase-core</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
@@ -91,24 +100,58 @@
         </configuration>
       </plugin>
 
+      <!-- Runnable only for CI schema validation (18-validate-db-schema boots
+           the src/test TestApplication); repackage is skipped so the artifact
+           stays a plain library jar. -->
       <plugin>
-        <groupId>com.diffplug.spotless</groupId>
-        <artifactId>spotless-maven-plugin</artifactId>
-        <version>2.44.3</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
-          <java>
-            <googleJavaFormat />
-          </java>
+          <mainClass>edu.ucsb.cs156.jobs.testapp.TestApplication</mainClass>
+          <useTestClasspath>true</useTestClasspath>
+          <additionalClasspathElements>
+            <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
+          </additionalClasspathElements>
         </configuration>
         <executions>
           <execution>
-            <id>spotless-check</id>
-            <phase>verify</phase>
+            <id>repackage</id>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>com.cosium.code</groupId>
+        <artifactId>git-code-format-maven-plugin</artifactId>
+        <version>5.3</version>
+        <executions>
+          <!-- On commit, format the modified files -->
+          <execution>
+            <id>install-formatter-hook</id>
             <goals>
-              <goal>check</goal>
+              <goal>install-hooks</goal>
+            </goals>
+          </execution>
+          <!-- On Maven verify phase, fail if any file
+          (including unmodified) is badly formatted -->
+          <execution>
+            <id>validate-code-format</id>
+            <goals>
+              <goal>validate-code-format</goal>
             </goals>
           </execution>
         </executions>
+        <dependencies>
+          <!-- Enable https://github.com/google/google-java-format -->
+          <dependency>
+            <groupId>com.cosium.code</groupId>
+            <artifactId>google-java-format</artifactId>
+            <version>5.3</version>
+          </dependency>
+        </dependencies>
       </plugin>
 
       <plugin>
