@@ -21,9 +21,11 @@ when decisions change.
 - [x] Phase 0: design reviewed; all §7 questions resolved with Phill 2026-07-12
       (headline: frontiers' Course link generalizes into library `scopeType`/`scopeId`
       columns, DESIGN.md §3.4; MIT license; Phill creating the npm org)
-- [ ] Phase 1: build backend library here (root `pom.xml`, package `edu.ucsb.cs156.jobs`), full jacoco+pitest coverage, tag v0.1.0
-      — code complete 2026-07-12 (45 tests, jacoco 100%, pitest 100% w/ autoconfig excluded); awaiting Phill's review, commit, and tag
-- [ ] Phase 2: installation pilot in proj-dining (backend)
+- [x] Phase 1: backend library built and released 2026-07-12 — 45 tests, jacoco
+      100%, pitest 100% (autoconfig excluded), org CI workflows green, gh-pages
+      docs live, tagged v0.1.0, JitPack build verified
+      (`com.github.ucsb-cs156:lib-jobs:v0.1.0` resolves)
+- [ ] Phase 2: installation pilot in proj-dining (backend) — in progress as of 2026-07-12
 - [ ] Phase 3: migration pilot in proj-scaffold
 - [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — scope migration)
 - [ ] Phase 7: frontend package in `frontend/`

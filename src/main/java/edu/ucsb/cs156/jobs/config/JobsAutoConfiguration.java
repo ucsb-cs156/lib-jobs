@@ -40,27 +40,36 @@ import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecu
 @EnableScheduling
 public class JobsAutoConfiguration {
 
+  /*
+   * Bean method names are prefixed with libJobs so the resulting bean NAMES
+   * cannot collide with beans the consuming apps define themselves: every app
+   * keeps a launch controller class named JobsController (bean name
+   * "jobsController"), and @ConditionalOnMissingBean matches by type, not
+   * name, so a name collision would fail startup with
+   * BeanDefinitionOverrideException.
+   */
+
   @Bean
   @ConditionalOnMissingBean
-  public JobContextFactory jobContextFactory(JobsRepository jobsRepository) {
+  public JobContextFactory libJobsContextFactory(JobsRepository jobsRepository) {
     return new JobContextFactory(jobsRepository);
   }
 
   @Bean
   @ConditionalOnMissingBean
-  public JobService jobService() {
+  public JobService libJobsService() {
     return new JobService();
   }
 
   @Bean
   @ConditionalOnMissingBean
-  public JobsController jobsController() {
+  public JobsController libJobsController() {
     return new JobsController();
   }
 
   @Bean
   @ConditionalOnMissingBean
-  public JobRateLimit jobRateLimit(
+  public JobRateLimit libJobsRateLimit(
       @Value("${app.jobs.rate-limit-ms:200}") String rateLimitMsString) {
     return new JobRateLimit(rateLimitMsString);
   }
