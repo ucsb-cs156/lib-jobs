@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html"},{"l":"edu.ucsb.cs156.jobs.config"},{"l":"edu.ucsb.cs156.jobs.controllers"},{"l":"edu.ucsb.cs156.jobs.entities"},{"l":"edu.ucsb.cs156.jobs.errors"},{"l":"edu.ucsb.cs156.jobs.repositories"},{"l":"edu.ucsb.cs156.jobs.services"}];updateSearchResults();
