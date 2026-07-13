@@ -1,60 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JobContext.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">lib-jobs</a> &gt; <a href="index.source.html" class="el_package">edu.ucsb.cs156.jobs.services</a> &gt; <span class="el_source">JobContext.java</span></div><h1>JobContext.java</h1><pre class="source lang-java linenums">package edu.ucsb.cs156.jobs.services;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
+import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Handed to a running {@link JobContextConsumer}; each {@link #log} call appends a line to the
- * job's persistent log and saves it, so admins can watch progress live.
+ * Handed to a running {@link JobContextConsumer}; each {@link #log} call appends one line to the
+ * job's log, so admins can watch progress live.
  *
- * &lt;p&gt;The job body runs inside one all-or-nothing transaction (see {@link JobService#runJobAsync}),
- * so log saves must NOT join it: they would be invisible to the admin UI until the whole job
- * commits. When a {@code logTransactionTemplate} is provided (configured REQUIRES_NEW by {@link
- * JobContextFactory}), each log line commits in its own transaction immediately.
+ * &lt;p&gt;Since v0.2.0, each line is its own row in {@code job_logs} (see {@link JobLog}) rather than a
+ * read-modify-write of one growing TEXT column on {@code jobs} — an O(1) insert instead of an O(N)
+ * rewrite of everything logged so far. The job body runs inside one all-or-nothing transaction (see
+ * {@link JobService#runJobAsync}), so log writes must NOT join it: they would be invisible to the
+ * admin UI until the whole job commits. When a {@code logTransactionTemplate} is provided
+ * (configured REQUIRES_NEW by {@link JobContextFactory}), each line commits in its own transaction
+ * immediately.
  *
- * &lt;p&gt;A null repository is tolerated (the log accumulates on the entity without being persisted):
- * the apps' job tests conventionally run jobs against {@code new JobContext(null, job)} and assert
- * on {@code job.getLog()}.
+ * &lt;p&gt;A null {@code jobLogRepository} is tolerated as a test seam: the log accumulates on {@code
+ * job}'s (Java-only, {@code @Transient}) {@code log} field instead of being persisted anywhere. The
+ * apps' job tests conventionally run jobs against {@code new JobContext(null, job)} and assert on
+ * {@code job.getLog()}; that legacy two-arg constructor is preserved unchanged for exactly this
+ * reason.
  */
-<span class="fc" id="L21">@Slf4j</span>
+<span class="fc" id="L28">@Slf4j</span>
 public class JobContext {
-  private final JobsRepository jobsRepository;
+  private final JobLogRepository jobLogRepository;
   private final Job job;
   private final TransactionTemplate logTransactionTemplate;
 
+  /**
+   * @deprecated kept only so existing test code written against v0.1.x ({@code new JobContext(null,
+   *     job)}) keeps compiling; the {@code jobsRepository} parameter is ignored. Use {@link
+   *     #JobContext(JobLogRepository, Job, TransactionTemplate)}.
+   */
+  @Deprecated
   public JobContext(JobsRepository jobsRepository, Job job) {
-<span class="fc" id="L28">    this(jobsRepository, job, null);</span>
-<span class="fc" id="L29">  }</span>
+<span class="fc" id="L41">    this((JobLogRepository) null, job, null);</span>
+<span class="fc" id="L42">  }</span>
 
   public JobContext(
-<span class="fc" id="L32">      JobsRepository jobsRepository, Job job, TransactionTemplate logTransactionTemplate) {</span>
-<span class="fc" id="L33">    this.jobsRepository = jobsRepository;</span>
-<span class="fc" id="L34">    this.job = job;</span>
-<span class="fc" id="L35">    this.logTransactionTemplate = logTransactionTemplate;</span>
-<span class="fc" id="L36">  }</span>
+<span class="fc" id="L45">      JobLogRepository jobLogRepository, Job job, TransactionTemplate logTransactionTemplate) {</span>
+<span class="fc" id="L46">    this.jobLogRepository = jobLogRepository;</span>
+<span class="fc" id="L47">    this.job = job;</span>
+<span class="fc" id="L48">    this.logTransactionTemplate = logTransactionTemplate;</span>
+<span class="fc" id="L49">  }</span>
 
   public void log(String message) {
-<span class="fc" id="L39">    log.info(&quot;Job {}: {}&quot;, job.getId(), message);</span>
-<span class="fc bfc" id="L40" title="All 2 branches covered.">    String previousLog = job.getLog() == null ? &quot;&quot; : (job.getLog() + &quot;\n&quot;);</span>
-<span class="fc" id="L41">    job.setLog(previousLog + message);</span>
-<span class="fc bfc" id="L42" title="All 2 branches covered.">    if (jobsRepository == null) {</span>
-<span class="fc" id="L43">      return;</span>
+<span class="fc" id="L52">    log.info(&quot;Job {}: {}&quot;, job.getId(), message);</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">    if (jobLogRepository == null) {</span>
+      // Test seam: no persistence available, so accumulate in-memory on the
+      // (Java-only) Job.log field, exactly as v0.1.x did for every caller.
+<span class="fc bfc" id="L56" title="All 2 branches covered.">      String previousLog = job.getLog() == null ? &quot;&quot; : (job.getLog() + &quot;\n&quot;);</span>
+<span class="fc" id="L57">      job.setLog(previousLog + message);</span>
+<span class="fc" id="L58">      return;</span>
     }
-<span class="fc bfc" id="L45" title="All 2 branches covered.">    if (logTransactionTemplate != null) {</span>
-<span class="fc" id="L46">      logTransactionTemplate.executeWithoutResult(status -&gt; jobsRepository.save(job));</span>
+<span class="fc" id="L60">    JobLog entry = JobLog.builder().jobId(job.getId()).message(message).build();</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">    if (logTransactionTemplate != null) {</span>
+<span class="fc" id="L62">      logTransactionTemplate.executeWithoutResult(status -&gt; jobLogRepository.save(entry));</span>
     } else {
-<span class="fc" id="L48">      jobsRepository.save(job);</span>
+<span class="fc" id="L64">      jobLogRepository.save(entry);</span>
     }
-<span class="fc" id="L50">  }</span>
+<span class="fc" id="L66">  }</span>
 
   /**
    * Exposes the underlying job, mainly so job bodies and their tests can inspect state (e.g. {@code
-   * ctx.getJob().getLog()}) without threading a separate reference through.
+   * ctx.getJob().getLog()}) without threading a separate reference through. Note: for a real
+   * (non-test-seam) run, {@code job.getLog()} is not kept up to date by {@link #log} any more (see
+   * class javadoc) — it reflects whatever the caller last set it to, typically nothing.
    */
   public Job getJob() {
-<span class="fc" id="L57">    return job;</span>
+<span class="fc" id="L75">    return job;</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

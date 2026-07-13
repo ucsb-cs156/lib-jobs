@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JobService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">lib-jobs</a> &gt; <a href="index.source.html" class="el_package">edu.ucsb.cs156.jobs.services</a> &gt; <span class="el_source">JobService.java</span></div><h1>JobService.java</h1><pre class="source lang-java linenums">package edu.ucsb.cs156.jobs.services;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
+import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -13,9 +19,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Creates {@link Job} rows and runs {@link JobContextConsumer}s asynchronously on the {@code
  * jobsExecutor}, recording status and log output as they run.
  */
-<span class="fc" id="L16">@Slf4j</span>
-<span class="fc" id="L17">public class JobService {</span>
+<span class="fc" id="L22">@Slf4j</span>
+<span class="fc" id="L23">public class JobService {</span>
   @Autowired private JobsRepository jobsRepository;
+
+  @Autowired private JobLogRepository jobLogRepository;
 
   @Autowired private JobUserProvider jobUserProvider;
 
@@ -31,20 +39,20 @@ import org.springframework.transaction.support.TransactionTemplate;
 
   public Job runAsJob(JobContextConsumer jobFunction) {
     Job job =
-<span class="fc" id="L34">        Job.builder()</span>
-<span class="fc" id="L35">            .createdById(jobUserProvider.getCurrentUserId())</span>
-<span class="fc" id="L36">            .createdByEmail(jobUserProvider.getCurrentUserEmail())</span>
-<span class="fc" id="L37">            .status(&quot;queued&quot;)</span>
-<span class="fc" id="L38">            .jobName(jobFunction.getJobName())</span>
-<span class="fc" id="L39">            .scopeType(jobFunction.getScopeType())</span>
-<span class="fc" id="L40">            .scopeId(jobFunction.getScopeId())</span>
-<span class="fc" id="L41">            .build();</span>
+<span class="fc" id="L42">        Job.builder()</span>
+<span class="fc" id="L43">            .createdById(jobUserProvider.getCurrentUserId())</span>
+<span class="fc" id="L44">            .createdByEmail(jobUserProvider.getCurrentUserEmail())</span>
+<span class="fc" id="L45">            .status(&quot;queued&quot;)</span>
+<span class="fc" id="L46">            .jobName(jobFunction.getJobName())</span>
+<span class="fc" id="L47">            .scopeType(jobFunction.getScopeType())</span>
+<span class="fc" id="L48">            .scopeId(jobFunction.getScopeId())</span>
+<span class="fc" id="L49">            .build();</span>
 
-<span class="fc" id="L43">    jobsRepository.save(job);</span>
-<span class="fc" id="L44">    log.info(&quot;Queued job: {}, jobName={}&quot;, job.getId(), job.getJobName());</span>
-<span class="fc" id="L45">    self.runJobAsync(job, jobFunction);</span>
+<span class="fc" id="L51">    jobsRepository.save(job);</span>
+<span class="fc" id="L52">    log.info(&quot;Queued job: {}, jobName={}&quot;, job.getId(), job.getJobName());</span>
+<span class="fc" id="L53">    self.runJobAsync(job, jobFunction);</span>
 
-<span class="fc" id="L47">    return job;</span>
+<span class="fc" id="L55">    return job;</span>
   }
 
   /**
@@ -70,41 +78,65 @@ import org.springframework.transaction.support.TransactionTemplate;
      * time by default); &quot;running&quot; is only truthful once we get here. This
      * save is outside the wrapping transaction, so it is visible immediately.
      */
-<span class="fc" id="L73">    job.setStatus(&quot;running&quot;);</span>
-<span class="fc" id="L74">    jobsRepository.save(job);</span>
+<span class="fc" id="L81">    job.setStatus(&quot;running&quot;);</span>
+<span class="fc" id="L82">    jobsRepository.save(job);</span>
 
-<span class="fc" id="L76">    JobContext context = contextFactory.createContext(job);</span>
+<span class="fc" id="L84">    JobContext context = contextFactory.createContext(job);</span>
 
     try {
-<span class="fc" id="L79">      transactionTemplate.executeWithoutResult(</span>
+<span class="fc" id="L87">      transactionTemplate.executeWithoutResult(</span>
           status -&gt; {
             try {
-<span class="fc" id="L82">              jobFunction.accept(context);</span>
+<span class="fc" id="L90">              jobFunction.accept(context);</span>
               /*lambdas cannot throw checked exceptions
               have to repackage as a runtime exception
               to catch outside transactional boundary*/
-<span class="fc" id="L86">            } catch (Exception e) {</span>
-<span class="fc" id="L87">              throw new RuntimeException(e);</span>
-<span class="fc" id="L88">            }</span>
-<span class="fc" id="L89">          });</span>
-<span class="fc" id="L90">    } catch (Exception e) {</span>
-<span class="fc" id="L91">      job.setStatus(&quot;error&quot;);</span>
-<span class="fc" id="L92">      context.log(e.getMessage());</span>
-<span class="fc" id="L93">      return;</span>
-<span class="fc" id="L94">    }</span>
+<span class="fc" id="L94">            } catch (Exception e) {</span>
+<span class="fc" id="L95">              throw new RuntimeException(e);</span>
+<span class="fc" id="L96">            }</span>
+<span class="fc" id="L97">          });</span>
+<span class="fc" id="L98">    } catch (Exception e) {</span>
+<span class="fc" id="L99">      job.setStatus(&quot;error&quot;);</span>
+<span class="fc" id="L100">      jobsRepository.save(job);</span>
+<span class="fc" id="L101">      context.log(e.getMessage());</span>
+<span class="fc" id="L102">      return;</span>
+<span class="fc" id="L103">    }</span>
 
-<span class="fc" id="L96">    job.setStatus(&quot;complete&quot;);</span>
-<span class="fc" id="L97">    jobsRepository.save(job);</span>
-<span class="fc" id="L98">  }</span>
+<span class="fc" id="L105">    job.setStatus(&quot;complete&quot;);</span>
+<span class="fc" id="L106">    jobsRepository.save(job);</span>
+<span class="fc" id="L107">  }</span>
 
+  /** The full log for one job, oldest line first. */
   public String getJobLogs(Long jobId) {
-<span class="fc" id="L101">    Job job =</span>
-        jobsRepository
-<span class="fc" id="L103">            .findById(jobId)</span>
-<span class="fc" id="L104">            .orElseThrow(() -&gt; new EntityNotFoundException(Job.class, jobId));</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
+<span class="fc" id="L112">      throw new EntityNotFoundException(Job.class, jobId);</span>
+    }
+<span class="fc" id="L114">    List&lt;JobLog&gt; entries = jobLogRepository.findByJobIdOrderByIdAsc(jobId);</span>
+<span class="fc" id="L115">    return entries.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
+  }
 
-<span class="fc" id="L106">    String jobLog = job.getLog();</span>
-<span class="fc bfc" id="L107" title="All 2 branches covered.">    return jobLog != null ? jobLog : &quot;&quot;;</span>
+  /**
+   * Everything logged for this job since {@code afterId} (exclusive), oldest first — the
+   * incremental &quot;tail -f&quot; query: a polling client passes the highest id it has already seen and
+   * gets back only new lines.
+   */
+  public List&lt;JobLog&gt; getJobLogTail(Long jobId, Long afterId) {
+<span class="fc bfc" id="L124" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
+<span class="fc" id="L125">      throw new EntityNotFoundException(Job.class, jobId);</span>
+    }
+<span class="fc" id="L127">    return jobLogRepository.findByJobIdAndIdGreaterThanOrderByIdAsc(jobId, afterId);</span>
+  }
+
+  /**
+   * The most recent log lines for one job, joined into a single string oldest-first — used to
+   * populate a preview on list/paginated responses without shipping each job's entire log. Assumes
+   * the job id is already known-valid (the caller has just fetched a page of {@link Job} rows).
+   */
+  public String getJobLogPreview(Long jobId) {
+<span class="fc" id="L136">    List&lt;JobLog&gt; tail = jobLogRepository.findTop10ByJobIdOrderByIdDesc(jobId);</span>
+<span class="fc" id="L137">    List&lt;JobLog&gt; chronological = new ArrayList&lt;&gt;(tail);</span>
+<span class="fc" id="L138">    Collections.reverse(chronological);</span>
+<span class="fc" id="L139">    return chronological.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
