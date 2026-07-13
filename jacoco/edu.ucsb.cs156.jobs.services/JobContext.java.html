@@ -2,30 +2,51 @@
 
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Handed to a running {@link JobContextConsumer}; each {@link #log} call appends a line to the
  * job's persistent log and saves it, so admins can watch progress live.
  *
+ * &lt;p&gt;The job body runs inside one all-or-nothing transaction (see {@link JobService#runJobAsync}),
+ * so log saves must NOT join it: they would be invisible to the admin UI until the whole job
+ * commits. When a {@code logTransactionTemplate} is provided (configured REQUIRES_NEW by {@link
+ * JobContextFactory}), each log line commits in its own transaction immediately.
+ *
  * &lt;p&gt;A null repository is tolerated (the log accumulates on the entity without being persisted):
  * the apps' job tests conventionally run jobs against {@code new JobContext(null, job)} and assert
  * on {@code job.getLog()}.
  */
-@AllArgsConstructor
-<span class="fc" id="L17">@Slf4j</span>
+<span class="fc" id="L21">@Slf4j</span>
 public class JobContext {
-  private JobsRepository jobsRepository;
-  private Job job;
+  private final JobsRepository jobsRepository;
+  private final Job job;
+  private final TransactionTemplate logTransactionTemplate;
+
+  public JobContext(JobsRepository jobsRepository, Job job) {
+<span class="fc" id="L28">    this(jobsRepository, job, null);</span>
+<span class="fc" id="L29">  }</span>
+
+  public JobContext(
+<span class="fc" id="L32">      JobsRepository jobsRepository, Job job, TransactionTemplate logTransactionTemplate) {</span>
+<span class="fc" id="L33">    this.jobsRepository = jobsRepository;</span>
+<span class="fc" id="L34">    this.job = job;</span>
+<span class="fc" id="L35">    this.logTransactionTemplate = logTransactionTemplate;</span>
+<span class="fc" id="L36">  }</span>
 
   public void log(String message) {
-<span class="fc" id="L23">    log.info(&quot;Job {}: {}&quot;, job.getId(), message);</span>
-<span class="fc bfc" id="L24" title="All 2 branches covered.">    String previousLog = job.getLog() == null ? &quot;&quot; : (job.getLog() + &quot;\n&quot;);</span>
-<span class="fc" id="L25">    job.setLog(previousLog + message);</span>
-<span class="fc bfc" id="L26" title="All 2 branches covered.">    if (jobsRepository != null) {</span>
-<span class="fc" id="L27">      jobsRepository.save(job);</span>
+<span class="fc" id="L39">    log.info(&quot;Job {}: {}&quot;, job.getId(), message);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">    String previousLog = job.getLog() == null ? &quot;&quot; : (job.getLog() + &quot;\n&quot;);</span>
+<span class="fc" id="L41">    job.setLog(previousLog + message);</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">    if (jobsRepository == null) {</span>
+<span class="fc" id="L43">      return;</span>
     }
-<span class="fc" id="L29">  }</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">    if (logTransactionTemplate != null) {</span>
+<span class="fc" id="L46">      logTransactionTemplate.executeWithoutResult(status -&gt; jobsRepository.save(job));</span>
+    } else {
+<span class="fc" id="L48">      jobsRepository.save(job);</span>
+    }
+<span class="fc" id="L50">  }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

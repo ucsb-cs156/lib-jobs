@@ -15,6 +15,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * Auto-configuration for the jobs system; activates when the library is on the classpath.
@@ -38,7 +39,7 @@ import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecu
 @AutoConfigurationPackage(basePackages = &quot;edu.ucsb.cs156.jobs&quot;)
 @EnableAsync
 @EnableScheduling
-<span class="fc" id="L41">public class JobsAutoConfiguration {</span>
+<span class="fc" id="L42">public class JobsAutoConfiguration {</span>
 
   /*
    * Bean method names are prefixed with libJobs so the resulting bean NAMES
@@ -51,27 +52,28 @@ import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecu
 
   @Bean
   @ConditionalOnMissingBean
-  public JobContextFactory libJobsContextFactory(JobsRepository jobsRepository) {
-<span class="fc" id="L55">    return new JobContextFactory(jobsRepository);</span>
+  public JobContextFactory libJobsContextFactory(
+      JobsRepository jobsRepository, PlatformTransactionManager transactionManager) {
+<span class="fc" id="L57">    return new JobContextFactory(jobsRepository, transactionManager);</span>
   }
 
   @Bean
   @ConditionalOnMissingBean
   public JobService libJobsService() {
-<span class="fc" id="L61">    return new JobService();</span>
+<span class="fc" id="L63">    return new JobService();</span>
   }
 
   @Bean
   @ConditionalOnMissingBean
   public JobsController libJobsController() {
-<span class="fc" id="L67">    return new JobsController();</span>
+<span class="fc" id="L69">    return new JobsController();</span>
   }
 
   @Bean
   @ConditionalOnMissingBean
   public JobRateLimit libJobsRateLimit(
       @Value(&quot;${app.jobs.rate-limit-ms:200}&quot;) String rateLimitMsString) {
-<span class="fc" id="L74">    return new JobRateLimit(rateLimitMsString);</span>
+<span class="fc" id="L76">    return new JobRateLimit(rateLimitMsString);</span>
   }
 
   @Bean(name = &quot;jobsExecutor&quot;)
@@ -80,14 +82,14 @@ import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecu
       @Value(&quot;${app.jobs.core-pool-size:1}&quot;) int corePoolSize,
       @Value(&quot;${app.jobs.max-pool-size:1}&quot;) int maxPoolSize,
       @Value(&quot;${app.jobs.queue-capacity:2147483647}&quot;) int queueCapacity) {
-<span class="fc" id="L83">    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
-<span class="fc" id="L84">    executor.setCorePoolSize(corePoolSize);</span>
-<span class="fc" id="L85">    executor.setMaxPoolSize(maxPoolSize);</span>
-<span class="fc" id="L86">    executor.setQueueCapacity(queueCapacity);</span>
-<span class="fc" id="L87">    executor.setThreadNamePrefix(&quot;jobsExecutor-&quot;);</span>
-<span class="fc" id="L88">    executor.initialize();</span>
+<span class="fc" id="L85">    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+<span class="fc" id="L86">    executor.setCorePoolSize(corePoolSize);</span>
+<span class="fc" id="L87">    executor.setMaxPoolSize(maxPoolSize);</span>
+<span class="fc" id="L88">    executor.setQueueCapacity(queueCapacity);</span>
+<span class="fc" id="L89">    executor.setThreadNamePrefix(&quot;jobsExecutor-&quot;);</span>
+<span class="fc" id="L90">    executor.initialize();</span>
     // propagate the launching admin's security context onto the job thread
-<span class="fc" id="L90">    return new DelegatingSecurityContextAsyncTaskExecutor(executor);</span>
+<span class="fc" id="L92">    return new DelegatingSecurityContextAsyncTaskExecutor(executor);</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
