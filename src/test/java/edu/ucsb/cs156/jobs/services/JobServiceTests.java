@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,7 +74,7 @@ public class JobServiceTests {
 
     assertEquals(42L, job.getCreatedById());
     assertEquals("test@example.org", job.getCreatedByEmail());
-    assertEquals("running", job.getStatus());
+    assertEquals("queued", job.getStatus());
     assertEquals("DemoScopedJob", job.getJobName());
     assertEquals("course", job.getScopeType());
     assertEquals(17L, job.getScopeId());
@@ -94,23 +96,30 @@ public class JobServiceTests {
 
   @Test
   public void runJobAsync_success_sets_status_complete_and_commits() {
-    Job job = Job.builder().status("running").build();
+    Job job = Job.builder().status("queued").build();
     JobContext context = new JobContext(jobsRepository, job);
     when(contextFactory.createContext(job)).thenReturn(context);
-    JobContextConsumer jobFunction = c -> c.log("working");
+    List<String> observedStatuses = new ArrayList<>();
+    JobContextConsumer jobFunction =
+        c -> {
+          observedStatuses.add(job.getStatus());
+          c.log("working");
+        };
 
     jobService.runJobAsync(job, jobFunction);
 
+    // the status must move to "running" before the job body executes
+    assertEquals(List.of("running"), observedStatuses);
     assertEquals("complete", job.getStatus());
     assertEquals("working", job.getLog());
     verify(platformTransactionManager).commit(any());
-    // one save from context.log, one from the final status update
-    verify(jobsRepository, times(2)).save(job);
+    // one save for "running", one from context.log, one from the final status update
+    verify(jobsRepository, times(3)).save(job);
   }
 
   @Test
   public void runJobAsync_failure_sets_status_error_logs_and_rolls_back() {
-    Job job = Job.builder().status("running").build();
+    Job job = Job.builder().status("queued").build();
     JobContext context = new JobContext(jobsRepository, job);
     when(contextFactory.createContext(job)).thenReturn(context);
     JobContextConsumer jobFunction =
@@ -123,8 +132,8 @@ public class JobServiceTests {
     assertEquals("error", job.getStatus());
     assertEquals("java.lang.Exception: Fail!", job.getLog());
     verify(platformTransactionManager).rollback(any());
-    // only the save from context.log; the "complete" save must not happen
-    verify(jobsRepository, times(1)).save(job);
+    // one save for "running", one from context.log; the "complete" save must not happen
+    verify(jobsRepository, times(2)).save(job);
   }
 
   @Test

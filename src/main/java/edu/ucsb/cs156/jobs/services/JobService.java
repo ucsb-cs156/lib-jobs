@@ -34,14 +34,14 @@ public class JobService {
         Job.builder()
             .createdById(jobUserProvider.getCurrentUserId())
             .createdByEmail(jobUserProvider.getCurrentUserEmail())
-            .status("running")
+            .status("queued")
             .jobName(jobFunction.getJobName())
             .scopeType(jobFunction.getScopeType())
             .scopeId(jobFunction.getScopeId())
             .build();
 
     jobsRepository.save(job);
-    log.info("Starting job: {}, jobName={}", job.getId(), job.getJobName());
+    log.info("Queued job: {}, jobName={}", job.getId(), job.getJobName());
     self.runJobAsync(job, jobFunction);
 
     return job;
@@ -65,6 +65,14 @@ public class JobService {
    */
   @Async("jobsExecutor")
   public void runJobAsync(Job job, JobContextConsumer jobFunction) {
+    /*
+     * The job may have waited in the executor queue (it runs one job at a
+     * time by default); "running" is only truthful once we get here. This
+     * save is outside the wrapping transaction, so it is visible immediately.
+     */
+    job.setStatus("running");
+    jobsRepository.save(job);
+
     JobContext context = contextFactory.createContext(job);
 
     try {

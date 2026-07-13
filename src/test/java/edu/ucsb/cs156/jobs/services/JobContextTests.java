@@ -1,6 +1,7 @@
 package edu.ucsb.cs156.jobs.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -10,11 +11,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 public class JobContextTests {
 
   @Mock JobsRepository jobsRepository;
+
+  @Mock PlatformTransactionManager platformTransactionManager;
 
   @Test
   public void first_log_line_replaces_null_log() {
@@ -46,5 +51,18 @@ public class JobContextTests {
     context.log("no save, just accumulate");
 
     assertEquals("no save, just accumulate", job.getLog());
+  }
+
+  @Test
+  public void with_a_log_transaction_template_the_save_runs_inside_it() {
+    Job job = Job.builder().build();
+    TransactionTemplate template = new TransactionTemplate(platformTransactionManager);
+    JobContext context = new JobContext(jobsRepository, job, template);
+
+    context.log("transactional line");
+
+    assertEquals("transactional line", job.getLog());
+    verify(jobsRepository).save(job);
+    verify(platformTransactionManager).commit(any());
   }
 }

@@ -178,7 +178,19 @@ same feature for free.
   queue** — jobs run strictly one at a time in submission order, preventing
   concurrent-job races; apps wanting concurrency raise the pool sizes.
 
-Implementation notes (phase 1):
+Implementation notes (phase 1; log-visibility items added in v0.1.4):
+
+- **Live logs (v0.1.4):** the job body runs inside one all-or-nothing
+  `TransactionTemplate` (frontiers' design), which made every `ctx.log()` save
+  join that transaction — so nothing was visible to the admin UI until the job
+  finished (courses' fork, which never adopted the wrapper, was the only one
+  with genuinely live logs). `JobContext` now persists each log line in its
+  own `PROPAGATION_REQUIRES_NEW` transaction, restoring live visibility while
+  keeping the body atomic. An integration test reads the log from another
+  connection mid-run to pin this behavior.
+- **Status honesty (v0.1.4):** jobs are created as `queued` and only become
+  `running` when the (single-threaded, FIFO) executor picks them up, so a job
+  waiting behind another no longer claims to be running with an empty log.
 
 - `Job` timestamps use JPA lifecycle callbacks (`@PrePersist`/`@PreUpdate`)
   instead of Spring Data auditing, avoiding any interaction with the apps'

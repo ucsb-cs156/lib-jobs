@@ -104,9 +104,11 @@ public Job launchTestJob() {
 }
 ```
 
-The returned `Job` row updates live: `status` moves from `running` to
+The returned `Job` row updates live: `status` moves `queued` → `running` →
 `complete` (or `error`), and each `c.log(...)` call appends to the persistent
-`log` column, which admins can watch from the jobs UI.
+`log` column and commits in its own transaction (REQUIRES_NEW), so admins can
+watch progress from the jobs UI while the job runs — independent of the job
+body's all-or-nothing transaction.
 
 Jobs may optionally declare a *scope* (an association with one app-domain
 object, e.g. a course) by overriding `getScopeType()`/`getScopeId()`; the

@@ -7,12 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import edu.ucsb.cs156.jobs.services.JobContextConsumer;
 import edu.ucsb.cs156.jobs.services.JobService;
 import edu.ucsb.cs156.jobs.testapp.TestApplication;
 import edu.ucsb.cs156.jobs.testapp.TestJob;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +45,50 @@ public class JobsIntegrationTests {
               return status.equals("complete") || status.equals("error");
             });
     return jobsRepository.findById(jobId).orElseThrow();
+  }
+
+  /**
+   * The live-log guarantee: each log line commits in its own transaction, so it is visible to other
+   * connections (i.e. the admin UI) while the job is still running. Before v0.1.4, log writes
+   * joined the job body's wrapping transaction and nothing was visible until the job finished.
+   */
+  @Test
+  public void log_lines_are_visible_to_other_connections_while_the_job_is_still_running()
+      throws Exception {
+    CountDownLatch canFinish = new CountDownLatch(1);
+
+    JobContextConsumer blockedJob =
+        c -> {
+          c.log("progress line 1");
+          canFinish.await();
+          c.log("progress line 2");
+        };
+
+    Job launched = jobService.runAsJob(blockedJob);
+    Job queuedBehind = null;
+    try {
+      await()
+          .atMost(Duration.ofSeconds(10))
+          .until(
+              () ->
+                  "progress line 1"
+                      .equals(jobsRepository.findById(launched.getId()).orElseThrow().getLog()));
+      // the job must still be mid-run when its first log line became visible
+      assertEquals("running", jobsRepository.findById(launched.getId()).orElseThrow().getStatus());
+
+      // a job launched while the single-threaded executor is busy reports
+      // "queued" (not "running") until the executor picks it up
+      queuedBehind = jobService.runAsJob(TestJob.builder().build());
+      assertEquals(
+          "queued", jobsRepository.findById(queuedBehind.getId()).orElseThrow().getStatus());
+    } finally {
+      canFinish.countDown();
+    }
+
+    Job finished = awaitFinished(launched.getId());
+    assertEquals("complete", finished.getStatus());
+    assertEquals("progress line 1\nprogress line 2", finished.getLog());
+    assertEquals("complete", awaitFinished(queuedBehind.getId()).getStatus());
   }
 
   @Test

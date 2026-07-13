@@ -15,6 +15,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.task.DelegatingSecurityContextAsyncTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * Auto-configuration for the jobs system; activates when the library is on the classpath.
@@ -51,8 +52,9 @@ public class JobsAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  public JobContextFactory libJobsContextFactory(JobsRepository jobsRepository) {
-    return new JobContextFactory(jobsRepository);
+  public JobContextFactory libJobsContextFactory(
+      JobsRepository jobsRepository, PlatformTransactionManager transactionManager) {
+    return new JobContextFactory(jobsRepository, transactionManager);
   }
 
   @Bean
