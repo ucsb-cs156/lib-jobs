@@ -48,5 +48,13 @@ public class JobContext {
 <span class="fc" id="L48">      jobsRepository.save(job);</span>
     }
 <span class="fc" id="L50">  }</span>
+
+  /**
+   * Exposes the underlying job, mainly so job bodies and their tests can inspect state (e.g. {@code
+   * ctx.getJob().getLog()}) without threading a separate reference through.
+   */
+  public Job getJob() {
+<span class="fc" id="L57">    return job;</span>
+  }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
