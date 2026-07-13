@@ -64,7 +64,22 @@ when decisions change.
       Lesson for phases 4-6: budget for a live smoke test after each merge,
       not just green CI — scaffold has no integration/web-IT workflow, so
       neither regression would have been caught by CI alone.
-- [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — scope migration)
+- [ ] Phase 4: proj-courses — code complete 2026-07-13, PR
+      ucsb-cs156/proj-courses#314 (open). Backend 416 tests / jacoco 100% /
+      pitest 571/571; frontend 639 tests. Uses config to preserve
+      pre-migration behavior rather than silently changing it: executor
+      pool-size 2/2/500 (library defaults to single-thread), and
+      app.jobs.rate-limit-ms reads the same RATE_LIMIT_DELAY_MS env var as
+      before. Added JobContext.getJob() to the library (v0.1.6) — courses'
+      GradeHistoryImportServiceImplTests needed to inspect job state after
+      running a job body, a gap the other three migrations hadn't hit.
+      Found and closed a pre-existing gap: the admin UI had a working "Test
+      Job" launch form with no backend endpoint at all; added one (also
+      needed for this migration's own live smoke test). Two drive-by fixes
+      unrelated to lib-jobs, needed for a clean `mvn test` (both noted in the
+      PR): a missing mock bean in an unrelated controller test, and a
+      misplaced test file moved to match its subject's package.
+- [ ] Phases 5–6: proj-happycows, proj-frontiers (frontiers last — scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.
