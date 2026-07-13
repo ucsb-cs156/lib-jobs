@@ -40,9 +40,9 @@ when decisions change.
       planned for phase 6.
 
       Two real bugs found via dokku smoke-testing after #86 merged, each fixed
-      as a lib-jobs point release and tracked in follow-up PR
-      ucsb-cs156/proj-scaffold#88 (open as of 2026-07-13, CI green pending the
-      full pitest run):
+      as a lib-jobs point release and landed via follow-up PR
+      ucsb-cs156/proj-scaffold#88 (merged 2026-07-13; both fixes verified live
+      on dokku before merge):
       - **v0.1.4**: job body runs in one all-or-nothing transaction, so log
         writes joined it and were invisible until the job finished — a
         multi-minute job (SyncCourseWithPlRepoJob working through GitHub API
