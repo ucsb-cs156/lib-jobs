@@ -32,16 +32,38 @@ when decisions change.
       incl. Liquibase-from-jar and both complete/error paths. Lesson captured
       in v0.1.1: library bean names must be namespaced (libJobs*) since apps
       keep a launch controller whose bean name is jobsController.
-- [ ] Phase 3: migration pilot in proj-scaffold — code complete 2026-07-12 in
-      worktree `~/github/ucsb-cs156/proj-scaffold-lib-jobs` (branch
-      `pc-migrate-to-lib-jobs`); backend 744 tests / jacoco 100% / pitest
-      1039/1039, frontend 646 tests / prettier / eslint. Deleted core +
+- [x] Phase 3: migration pilot in proj-scaffold — merged 2026-07-13, PR
+      ucsb-cs156/proj-scaffold#86 (backend 744 tests / jacoco 100% / pitest
+      1039/1039, frontend 646 tests / prettier / eslint). Deleted core +
       AsyncConfig; scaffold turned out to have frontiers' FULL Course coupling,
-      so it also pilots the course→scope migration (changeset 039) originally
-      planned for phase 6. Requires lib-jobs v0.1.2 tag (JobContext null-repo
-      guard restored to match frontiers — the apps' job tests rely on
-      `new JobContext(null, job)` as a test seam). Awaiting v0.1.2 tag, then
-      commit/push/PR.
+      so it also piloted the course→scope migration (changeset 039) originally
+      planned for phase 6.
+
+      Two real bugs found via dokku smoke-testing after #86 merged, each fixed
+      as a lib-jobs point release and tracked in follow-up PR
+      ucsb-cs156/proj-scaffold#88 (open as of 2026-07-13, CI green pending the
+      full pitest run):
+      - **v0.1.4**: job body runs in one all-or-nothing transaction, so log
+        writes joined it and were invisible until the job finished — a
+        multi-minute job (SyncCourseWithPlRepoJob working through GitHub API
+        retries) looked hung. Fixed with a REQUIRES_NEW transaction per log
+        line; jobs also now start `queued` and only report `running` once the
+        executor picks them up. Verified with an integration test that reads
+        the log from another connection mid-run.
+      - **v0.1.5**: v0.1.4 itself shipped a regression — swagger-annotations-
+        jakarta was a plain compile dependency, so its pinned 2.2.28 won
+        Maven's nearest-wins mediation over springdoc's own (newer, deeper)
+        transitive version, breaking OpenAPI doc generation app-wide
+        (NoSuchMethodError on `Parameter.validationGroups()`; Swagger UI
+        failed to load). Fixed by marking it `provided`. A same-reactor
+        runtime test to guard this is structurally impossible (`provided`
+        doesn't stop the conflict from recreating itself inside lib-jobs's
+        own build); guarded instead with `PomDependencyScopeTests`, which
+        pins the pom.xml scope declaration directly.
+
+      Lesson for phases 4-6: budget for a live smoke test after each merge,
+      not just green CI — scaffold has no integration/web-IT workflow, so
+      neither regression would have been caught by CI alone.
 - [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 
