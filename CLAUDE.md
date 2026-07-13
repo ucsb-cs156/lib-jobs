@@ -25,8 +25,23 @@ when decisions change.
       100%, pitest 100% (autoconfig excluded), org CI workflows green, gh-pages
       docs live, tagged v0.1.0, JitPack build verified
       (`com.github.ucsb-cs156:lib-jobs:v0.1.0` resolves)
-- [ ] Phase 2: installation pilot in proj-dining (backend) — in progress as of 2026-07-12
-- [ ] Phase 3: migration pilot in proj-scaffold
+- [x] Phase 2: installation pilot in proj-dining (backend) — done 2026-07-12.
+      PR ucsb-cs156/proj-dining#131; adoption = JitPack dep + one Liquibase
+      include + JobUserProviderImpl + TestJob/launch endpoint; dining gates
+      stayed at jacoco 100% / pitest 100%; smoke-tested on dokku (Postgres)
+      incl. Liquibase-from-jar and both complete/error paths. Lesson captured
+      in v0.1.1: library bean names must be namespaced (libJobs*) since apps
+      keep a launch controller whose bean name is jobsController.
+- [ ] Phase 3: migration pilot in proj-scaffold — code complete 2026-07-12 in
+      worktree `~/github/ucsb-cs156/proj-scaffold-lib-jobs` (branch
+      `pc-migrate-to-lib-jobs`); backend 744 tests / jacoco 100% / pitest
+      1039/1039, frontend 646 tests / prettier / eslint. Deleted core +
+      AsyncConfig; scaffold turned out to have frontiers' FULL Course coupling,
+      so it also pilots the course→scope migration (changeset 039) originally
+      planned for phase 6. Requires lib-jobs v0.1.2 tag (JobContext null-repo
+      guard restored to match frontiers — the apps' job tests rely on
+      `new JobContext(null, job)` as a test seam). Awaiting v0.1.2 tag, then
+      commit/push/PR.
 - [ ] Phases 4–6: proj-courses, proj-happycows, proj-frontiers (frontiers last — scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 

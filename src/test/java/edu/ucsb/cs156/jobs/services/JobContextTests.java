@@ -37,4 +37,14 @@ public class JobContextTests {
     assertEquals("first line\nsecond line", job.getLog());
     verify(jobsRepository, times(1)).save(job);
   }
+
+  @Test
+  public void null_repository_is_tolerated_as_a_test_seam() {
+    Job job = Job.builder().build();
+    JobContext context = new JobContext(null, job);
+
+    context.log("no save, just accumulate");
+
+    assertEquals("no save, just accumulate", job.getLog());
+  }
 }
