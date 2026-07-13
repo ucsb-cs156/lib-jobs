@@ -9,14 +9,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
+import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -27,6 +29,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class JobServiceTests {
 
   @Mock JobsRepository jobsRepository;
+
+  @Mock JobLogRepository jobLogRepository;
 
   @Mock JobUserProvider jobUserProvider;
 
@@ -42,6 +46,7 @@ public class JobServiceTests {
   public void setup() {
     jobService = new JobService();
     ReflectionTestUtils.setField(jobService, "jobsRepository", jobsRepository);
+    ReflectionTestUtils.setField(jobService, "jobLogRepository", jobLogRepository);
     ReflectionTestUtils.setField(jobService, "jobUserProvider", jobUserProvider);
     ReflectionTestUtils.setField(jobService, "contextFactory", contextFactory);
     ReflectionTestUtils.setField(
@@ -96,8 +101,8 @@ public class JobServiceTests {
 
   @Test
   public void runJobAsync_success_sets_status_complete_and_commits() {
-    Job job = Job.builder().status("queued").build();
-    JobContext context = new JobContext(jobsRepository, job);
+    Job job = Job.builder().id(1L).status("queued").build();
+    JobContext context = new JobContext(jobLogRepository, job, null);
     when(contextFactory.createContext(job)).thenReturn(context);
     List<String> observedStatuses = new ArrayList<>();
     JobContextConsumer jobFunction =
@@ -111,16 +116,19 @@ public class JobServiceTests {
     // the status must move to "running" before the job body executes
     assertEquals(List.of("running"), observedStatuses);
     assertEquals("complete", job.getStatus());
-    assertEquals("working", job.getLog());
     verify(platformTransactionManager).commit(any());
-    // one save for "running", one from context.log, one from the final status update
-    verify(jobsRepository, times(3)).save(job);
+    // one save for "running", one for the final "complete" status update
+    verify(jobsRepository, times(2)).save(job);
+
+    ArgumentCaptor<JobLog> logCaptor = ArgumentCaptor.forClass(JobLog.class);
+    verify(jobLogRepository).save(logCaptor.capture());
+    assertEquals("working", logCaptor.getValue().getMessage());
   }
 
   @Test
   public void runJobAsync_failure_sets_status_error_logs_and_rolls_back() {
-    Job job = Job.builder().status("queued").build();
-    JobContext context = new JobContext(jobsRepository, job);
+    Job job = Job.builder().id(1L).status("queued").build();
+    JobContext context = new JobContext(jobLogRepository, job, null);
     when(contextFactory.createContext(job)).thenReturn(context);
     JobContextConsumer jobFunction =
         c -> {
@@ -130,34 +138,68 @@ public class JobServiceTests {
     jobService.runJobAsync(job, jobFunction);
 
     assertEquals("error", job.getStatus());
-    assertEquals("java.lang.Exception: Fail!", job.getLog());
     verify(platformTransactionManager).rollback(any());
-    // one save for "running", one from context.log; the "complete" save must not happen
+    // one save for "running", one for the "error" status update
     verify(jobsRepository, times(2)).save(job);
+
+    ArgumentCaptor<JobLog> logCaptor = ArgumentCaptor.forClass(JobLog.class);
+    verify(jobLogRepository).save(logCaptor.capture());
+    assertEquals("java.lang.Exception: Fail!", logCaptor.getValue().getMessage());
   }
 
   @Test
-  public void getJobLogs_returns_log_when_present() {
-    Job job = Job.builder().log("line1\nline2").build();
-    when(jobsRepository.findById(7L)).thenReturn(Optional.of(job));
+  public void getJobLogs_joins_log_lines_in_order() {
+    when(jobsRepository.existsById(7L)).thenReturn(true);
+    when(jobLogRepository.findByJobIdOrderByIdAsc(7L))
+        .thenReturn(
+            List.of(
+                JobLog.builder().jobId(7L).message("line1").build(),
+                JobLog.builder().jobId(7L).message("line2").build()));
 
     assertEquals("line1\nline2", jobService.getJobLogs(7L));
   }
 
   @Test
-  public void getJobLogs_returns_empty_string_for_null_log() {
-    Job job = Job.builder().build();
-    when(jobsRepository.findById(7L)).thenReturn(Optional.of(job));
+  public void getJobLogs_returns_empty_string_when_no_lines_logged() {
+    when(jobsRepository.existsById(7L)).thenReturn(true);
+    when(jobLogRepository.findByJobIdOrderByIdAsc(7L)).thenReturn(List.of());
 
     assertEquals("", jobService.getJobLogs(7L));
   }
 
   @Test
   public void getJobLogs_throws_EntityNotFoundException_when_missing() {
-    when(jobsRepository.findById(7L)).thenReturn(Optional.empty());
+    when(jobsRepository.existsById(7L)).thenReturn(false);
 
     EntityNotFoundException thrown =
         assertThrows(EntityNotFoundException.class, () -> jobService.getJobLogs(7L));
     assertEquals("Job with id 7 not found", thrown.getMessage());
+  }
+
+  @Test
+  public void getJobLogTail_returns_lines_after_the_given_id() {
+    when(jobsRepository.existsById(7L)).thenReturn(true);
+    List<JobLog> newLines = List.of(JobLog.builder().jobId(7L).message("line3").build());
+    when(jobLogRepository.findByJobIdAndIdGreaterThanOrderByIdAsc(7L, 2L)).thenReturn(newLines);
+
+    assertEquals(newLines, jobService.getJobLogTail(7L, 2L));
+  }
+
+  @Test
+  public void getJobLogTail_throws_EntityNotFoundException_when_missing() {
+    when(jobsRepository.existsById(7L)).thenReturn(false);
+
+    assertThrows(EntityNotFoundException.class, () -> jobService.getJobLogTail(7L, 0L));
+  }
+
+  @Test
+  public void getJobLogPreview_reverses_the_newest_first_query_to_chronological_order() {
+    when(jobLogRepository.findTop10ByJobIdOrderByIdDesc(7L))
+        .thenReturn(
+            List.of(
+                JobLog.builder().jobId(7L).message("newest").build(),
+                JobLog.builder().jobId(7L).message("oldest of the tail").build()));
+
+    assertEquals("oldest of the tail\nnewest", jobService.getJobLogPreview(7L));
   }
 }

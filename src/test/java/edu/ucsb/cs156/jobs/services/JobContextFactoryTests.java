@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
+import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,24 +19,21 @@ import org.springframework.transaction.TransactionDefinition;
 @ExtendWith(MockitoExtension.class)
 public class JobContextFactoryTests {
 
-  @Mock edu.ucsb.cs156.jobs.repositories.JobsRepository jobsRepository;
+  @Mock JobLogRepository jobLogRepository;
 
   @Mock PlatformTransactionManager transactionManager;
 
   @Test
   public void createContext_wires_repository_job_and_requires_new_log_transactions() {
-    JobContextFactory factory = new JobContextFactory(jobsRepository, transactionManager);
-    Job job = Job.builder().build();
+    JobContextFactory factory = new JobContextFactory(jobLogRepository, transactionManager);
+    Job job = Job.builder().id(1L).build();
 
     JobContext context = factory.createContext(job);
 
     assertNotNull(context);
     context.log("hello");
-    assertEquals("hello", job.getLog());
-    verify(jobsRepository).save(job);
+    verify(jobLogRepository).save(any(JobLog.class));
 
-    // each log line must commit in its own transaction, independent of the
-    // job body's wrapping transaction, so it is visible to the admin UI live
     ArgumentCaptor<TransactionDefinition> definition =
         ArgumentCaptor.forClass(TransactionDefinition.class);
     verify(transactionManager).getTransaction(definition.capture());

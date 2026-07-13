@@ -1,6 +1,7 @@
 package edu.ucsb.cs156.jobs.controllers;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import edu.ucsb.cs156.jobs.services.JobService;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,9 +29,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Admin REST API for job records: list (all or paginated), fetch one, fetch logs, delete one or
- * all. Launch endpoints stay in each app's own controllers. Requires {@code ROLE_ADMIN}, which
- * consuming apps must support via method security ({@code @EnableMethodSecurity}).
+ * Admin REST API for job records: list (all or paginated, filterable, sortable by any field), fetch
+ * one, fetch logs (full or incremental tail), delete one or all. Launch endpoints stay in each
+ * app's own controllers. Requires {@code ROLE_ADMIN}, which consuming apps must support via method
+ * security ({@code @EnableMethodSecurity}).
  */
 @Tag(name = "Jobs")
 @RequestMapping("/api/jobs")
@@ -37,7 +40,18 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class JobsController {
   public static final List<String> ALLOWED_SORT_FIELDS =
-      Arrays.asList("id", "jobName", "status", "createdByEmail", "createdAt", "updatedAt");
+      Arrays.asList(
+          "id",
+          "jobName",
+          "status",
+          "createdByEmail",
+          "scopeType",
+          "scopeId",
+          "createdAt",
+          "updatedAt");
+
+  /** Number of trailing log lines included as a preview on list/paginated responses. */
+  public static final int LOG_PREVIEW_LINES = 10;
 
   @Autowired private JobsRepository jobsRepository;
 
@@ -47,10 +61,13 @@ public class JobsController {
   @PreAuthorize("hasRole('ROLE_ADMIN')")
   @GetMapping("/all")
   public Iterable<Job> allJobs() {
-    return jobsRepository.findAllByOrderByIdDesc();
+    Iterable<Job> jobs = jobsRepository.findAllByOrderByIdDesc();
+    jobs.forEach(this::populateLogPreview);
+    return jobs;
   }
 
-  @Operation(summary = "Get paginated jobs")
+  @Operation(
+      summary = "Get a paginated, optionally filtered, list of jobs, sortable by any allowed field")
   @PreAuthorize("hasRole('ROLE_ADMIN')")
   @GetMapping(value = "/paginated", produces = "application/json")
   public Page<Job> paginatedJobs(
@@ -63,7 +80,21 @@ public class JobsController {
           String sortField,
       @Parameter(name = "sortDirection", description = "sort direction", example = "ASC")
           @RequestParam(defaultValue = "DESC")
-          String sortDirection) {
+          String sortDirection,
+      @Parameter(name = "status", description = "exact match, e.g. \"running\"")
+          @RequestParam(required = false)
+          String status,
+      @Parameter(name = "jobName", description = "case-insensitive substring match")
+          @RequestParam(required = false)
+          String jobName,
+      @Parameter(name = "createdByEmail", description = "case-insensitive substring match")
+          @RequestParam(required = false)
+          String createdByEmail,
+      @Parameter(name = "scopeType", description = "exact match, e.g. \"course\"")
+          @RequestParam(required = false)
+          String scopeType,
+      @Parameter(name = "scopeId", description = "exact match") @RequestParam(required = false)
+          Long scopeId) {
 
     if (!ALLOWED_SORT_FIELDS.contains(sortField)) {
       throw new IllegalArgumentException(
@@ -84,8 +115,29 @@ public class JobsController {
       sortDirectionObject = Direction.ASC;
     }
 
+    Specification<Job> spec = Specification.where(null);
+    if (status != null && !status.isEmpty()) {
+      spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
+    }
+    if (jobName != null && !jobName.isEmpty()) {
+      String pattern = "%" + jobName.toLowerCase() + "%";
+      spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("jobName")), pattern));
+    }
+    if (createdByEmail != null && !createdByEmail.isEmpty()) {
+      String pattern = "%" + createdByEmail.toLowerCase() + "%";
+      spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("createdByEmail")), pattern));
+    }
+    if (scopeType != null && !scopeType.isEmpty()) {
+      spec = spec.and((root, query, cb) -> cb.equal(root.get("scopeType"), scopeType));
+    }
+    if (scopeId != null) {
+      spec = spec.and((root, query, cb) -> cb.equal(root.get("scopeId"), scopeId));
+    }
+
     PageRequest pageRequest = PageRequest.of(page, pageSize, sortDirectionObject, sortField);
-    return jobsRepository.findAll(pageRequest);
+    Page<Job> result = jobsRepository.findAll(spec, pageRequest);
+    result.getContent().forEach(this::populateLogPreview);
+    return result;
   }
 
   @Operation(summary = "Get a specific job by ID if it is in the database")
@@ -93,9 +145,10 @@ public class JobsController {
   @GetMapping("")
   public Job getJobById(
       @Parameter(name = "id", description = "ID of the job") @RequestParam Long id) {
-    return jobsRepository
-        .findById(id)
-        .orElseThrow(() -> new EntityNotFoundException(Job.class, id));
+    Job job =
+        jobsRepository.findById(id).orElseThrow(() -> new EntityNotFoundException(Job.class, id));
+    job.setLog(jobService.getJobLogs(id));
+    return job;
   }
 
   @Operation(summary = "Get long job logs")
@@ -103,6 +156,20 @@ public class JobsController {
   @GetMapping("/logs/{id}")
   public String getJobLogs(@Parameter(name = "id", description = "Job ID") @PathVariable Long id) {
     return jobService.getJobLogs(id);
+  }
+
+  @Operation(
+      summary =
+          "Get log lines written since afterId, for incremental live-tailing (poll with the "
+              + "highest id you've already seen)")
+  @PreAuthorize("hasRole('ROLE_ADMIN')")
+  @GetMapping("/logs/{id}/tail")
+  public List<JobLog> getJobLogTail(
+      @Parameter(name = "id", description = "Job ID") @PathVariable Long id,
+      @Parameter(name = "afterId", description = "only return lines with id greater than this")
+          @RequestParam(defaultValue = "0")
+          Long afterId) {
+    return jobService.getJobLogTail(id, afterId);
   }
 
   @Operation(summary = "Delete specific job record")
@@ -122,6 +189,10 @@ public class JobsController {
   public Map<String, String> deleteAllJobs() {
     jobsRepository.deleteAll();
     return Map.of("message", "All jobs deleted");
+  }
+
+  private void populateLogPreview(Job job) {
+    job.setLog(jobService.getJobLogPreview(job.getId()));
   }
 
   /**

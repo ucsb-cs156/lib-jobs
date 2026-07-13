@@ -387,7 +387,7 @@ react-bootstrap, react-router-dom, react-query flavor/version. Audit needed.
 7. **`JobRateLimit`:** property optional; default 200 ms, warn-and-default on
    unparseable values (matches courses' behavior).
 
-## 8. Job-log storage redesign (v0.2.0, in progress 2026-07-13)
+## 8. Job-log storage redesign (v0.2.0, shipped 2026-07-13)
 
 **Origin:** the single `jobs.log` TEXT column, appended to via read-modify-write
 on every `ctx.log()` call, is a design inherited from the original forks' era
@@ -504,6 +504,20 @@ dining → scaffold → courses → v0.3.0 built on the now-stable v0.2.0 → ha
 
 **Versioned as v0.2.0** under the pre-1.0 exception in §4, despite being a
 breaking change.
+
+**Implementation notes (2026-07-13):** two bugs surfaced only once real tests
+were written against the new schema, both fixed before tagging:
+`FK_JOB_LOGS_JOBS` needed `ON DELETE CASCADE` — without it, deleting any job
+that had logged even one line (via `deleteJob`, `deleteAllJobs`, or
+`deleteByScopeTypeAndScopeId`) would throw a foreign-key violation, since
+those all delete `Job` rows directly with no application-level cascade; and
+`getJobLogPreview`'s `Collections.reverse` mutated the list `jobLogRepository`
+returned in place, which isn't a safe assumption to make about a repository's
+return value. 45 tests → 61 (library-internal); jacoco and pitest both at
+100%, including a dedicated `JobsControllerFilteringIntegrationTests` against
+a real H2-backed repository, since `Specification` predicate lambdas built in
+a Mockito-mocked-repository test are constructed but never actually invoked
+by a `CriteriaBuilder`.
 
 ## 9. Job cancellation (deferred, design only — not yet built)
 

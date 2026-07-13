@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Transient;
 import java.time.ZonedDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -51,12 +52,15 @@ public class Job {
 
   private Long scopeId;
 
-  // 1048576 is 2^20, which is the max size of a mediumtext in MySQL
-  @Column(
-      columnDefinition = "TEXT",
-      length = 1048576) // needed for long strings, i.e. log entries longer than 255
-  // characters
-  private String log;
+  /**
+   * Not persisted as a column of this row (see {@code job_logs}, a separate append-only table, one
+   * row per log line, v0.2.0). This field exists purely as a Java-level convenience: {@link
+   * edu.ucsb.cs156.jobs.services.JobContext}'s null-repository test seam still accumulates into it
+   * in-memory so {@code job.getLog()} keeps working in existing tests, and the controller populates
+   * it explicitly (full text or a tail preview, depending on the endpoint) before a {@code Job} is
+   * serialized to a client.
+   */
+  @Transient private String log;
 
   private ZonedDateTime createdAt;
 

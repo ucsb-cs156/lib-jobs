@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.ucsb.cs156.jobs.entities.Job;
+import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import edu.ucsb.cs156.jobs.services.JobContextConsumer;
 import edu.ucsb.cs156.jobs.services.JobService;
@@ -69,10 +70,7 @@ public class JobsIntegrationTests {
     try {
       await()
           .atMost(Duration.ofSeconds(10))
-          .until(
-              () ->
-                  "progress line 1"
-                      .equals(jobsRepository.findById(launched.getId()).orElseThrow().getLog()));
+          .until(() -> "progress line 1".equals(jobService.getJobLogs(launched.getId())));
       // the job must still be mid-run when its first log line became visible
       assertEquals("running", jobsRepository.findById(launched.getId()).orElseThrow().getStatus());
 
@@ -87,7 +85,7 @@ public class JobsIntegrationTests {
 
     Job finished = awaitFinished(launched.getId());
     assertEquals("complete", finished.getStatus());
-    assertEquals("progress line 1\nprogress line 2", finished.getLog());
+    assertEquals("progress line 1\nprogress line 2", jobService.getJobLogs(launched.getId()));
     assertEquals("complete", awaitFinished(queuedBehind.getId()).getStatus());
   }
 
@@ -99,7 +97,9 @@ public class JobsIntegrationTests {
 
     Job finished = awaitFinished(launched.getId());
     assertEquals("complete", finished.getStatus());
-    assertEquals("Hello World! i=0\nHello World! i=1\nGoodbye from TestJob!", finished.getLog());
+    assertEquals(
+        "Hello World! i=0\nHello World! i=1\nGoodbye from TestJob!",
+        jobService.getJobLogs(finished.getId()));
     assertEquals("TestJob", finished.getJobName());
     assertEquals(42L, finished.getCreatedById());
     assertEquals("test@example.org", finished.getCreatedByEmail());
@@ -115,7 +115,28 @@ public class JobsIntegrationTests {
 
     Job finished = awaitFinished(launched.getId());
     assertEquals("error", finished.getStatus());
-    assertTrue(finished.getLog().contains("Fail!"), "log was: " + finished.getLog());
+    String log = jobService.getJobLogs(finished.getId());
+    assertTrue(log.contains("Fail!"), "log was: " + log);
+  }
+
+  @Test
+  public void getJobLogTail_returns_only_lines_logged_after_the_given_cursor() {
+    TestJob testJob = TestJob.builder().count(2).sleepMs(1).build();
+
+    Job launched = jobService.runAsJob(testJob);
+    Job finished = awaitFinished(launched.getId());
+
+    List<JobLog> all = jobService.getJobLogTail(finished.getId(), 0L);
+    assertEquals(3, all.size());
+    assertEquals("Hello World! i=0", all.get(0).getMessage());
+
+    List<JobLog> afterFirst = jobService.getJobLogTail(finished.getId(), all.get(0).getId());
+    assertEquals(2, afterFirst.size());
+    assertEquals("Hello World! i=1", afterFirst.get(0).getMessage());
+    assertEquals("Goodbye from TestJob!", afterFirst.get(1).getMessage());
+
+    List<JobLog> afterLast = jobService.getJobLogTail(finished.getId(), all.get(2).getId());
+    assertEquals(0, afterLast.size());
   }
 
   @Test
@@ -130,6 +151,8 @@ public class JobsIntegrationTests {
     assertEquals(1, forCourse17.size());
     assertEquals(scoped.getId(), forCourse17.get(0).getId());
 
+    // scoped's job_logs rows must not block the delete: FK_JOB_LOGS_JOBS is
+    // ON DELETE CASCADE precisely so a job with logged output can still be deleted
     jobsRepository.deleteByScopeTypeAndScopeId("course", 17L);
     assertEquals(1, jobsRepository.count());
     assertEquals(unscoped.getId(), jobsRepository.findAll().get(0).getId());

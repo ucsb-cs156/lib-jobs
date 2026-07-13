@@ -1,0 +1,67 @@
+{
+  "databaseChangeLog": [
+    {
+      "changeSet": {
+        "id": "lib-jobs-002-job-logs-table",
+        "author": "lib-jobs",
+        "comment": "v0.2.0: replace the single JOBS.LOG TEXT column (read-modify-write on every ctx.log() call, O(N^2) total) with an append-only JOB_LOGS table, one row per line",
+        "changes": [
+          {
+            "createTable": {
+              "tableName": "JOB_LOGS",
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "JOB_LOG_PK"
+                    },
+                    "name": "ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "JOB_ID",
+                    "type": "BIGINT",
+                    "constraints": { "nullable": false }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "MESSAGE",
+                    "type": "VARCHAR(1048576)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "addForeignKeyConstraint": {
+              "baseTableName": "JOB_LOGS",
+              "baseColumnNames": "JOB_ID",
+              "referencedTableName": "JOBS",
+              "referencedColumnNames": "ID",
+              "constraintName": "FK_JOB_LOGS_JOBS",
+              "onDelete": "CASCADE"
+            }
+          },
+          {
+            "dropColumn": {
+              "tableName": "JOBS",
+              "columnName": "LOG"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

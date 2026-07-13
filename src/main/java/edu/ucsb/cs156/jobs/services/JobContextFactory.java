@@ -1,7 +1,7 @@
 package edu.ucsb.cs156.jobs.services;
 
 import edu.ucsb.cs156.jobs.entities.Job;
-import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -14,18 +14,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * all-or-nothing transaction.
  */
 public class JobContextFactory {
-  private final JobsRepository jobsRepository;
+  private final JobLogRepository jobLogRepository;
   private final TransactionTemplate logTransactionTemplate;
 
   public JobContextFactory(
-      JobsRepository jobsRepository, PlatformTransactionManager transactionManager) {
-    this.jobsRepository = jobsRepository;
+      JobLogRepository jobLogRepository, PlatformTransactionManager transactionManager) {
+    this.jobLogRepository = jobLogRepository;
     this.logTransactionTemplate = new TransactionTemplate(transactionManager);
     this.logTransactionTemplate.setPropagationBehavior(
         TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
 
   public JobContext createContext(Job job) {
-    return new JobContext(jobsRepository, job, logTransactionTemplate);
+    return new JobContext(jobLogRepository, job, logTransactionTemplate);
   }
 }
