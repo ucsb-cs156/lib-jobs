@@ -473,12 +473,34 @@ teaching codebase (standard, well-known Spring Data pattern, not a new DSL to
 learn) per Appendix B's reasoning for keeping the API surface simple. Page
 size itself (10/25/50 etc.) was already just `pageSize`, no backend change.
 
+**Live tailing:** the per-line `id` in `job_logs` makes true incremental
+tailing natural — a new `GET /api/jobs/logs/{id}/tail?afterId=0` returns only
+entries with `id > afterId`, so a polling frontend fetches just what's new
+each cycle rather than re-fetching the whole (growing) log. Poll interval is
+a named, tunable constant (default 5s) in whichever page implements it.
+proj-dining has no frontend jobs UI yet (its phase-2 install was deliberately
+backend-only), so this ships as a documented backend contract, validated via
+Swagger/curl on dining rather than a one-off dining frontend page — the
+actual polling UI lands in `JobLogViewer` (§6, phase 7) or whichever app's
+frontend adopts v0.2.0 first with an existing jobs page to enhance. The list
+endpoint's "up to N lines then a button for the rest" pattern (N defaulting
+to 10) mirrors courses' existing `JobsTable` UX exactly, so that frontend
+needs no redesign, only smaller payloads.
+
 **Rollout, lowest-risk-first (Phill, 2026-07-13):** ship in lib-jobs, pilot in
 **proj-dining first** — no real users yet, and no historical log data to
 backfill (unlike scaffold/courses/happycows, which each need a backfill step
 copying existing `jobs.log` text into `job_logs` before the column drops).
-Prove it live on dokku, then roll the same version out to the other three
-migrated apps (each with its own backfill changeset) before frontiers.
+Prove it live on dokku, then **scaffold and courses** (already proven
+resilient through their own earlier migrations) — one app at a time, same
+discipline as every migration so far. **Happycows deliberately held back**:
+rather than two separate version bumps in quick succession on a
+mission-critical app (per Phill: happycows and frontiers, unlike dining, have
+real course user bases), it picks up v0.2.0 and v0.3.0 (§9, job cancellation)
+**together** once both have stabilized elsewhere. Frontiers stays last
+regardless (still needs the scope migration), so the full sequence is:
+dining → scaffold → courses → v0.3.0 built on the now-stable v0.2.0 → happycows
+(both versions at once) → frontiers.
 
 **Versioned as v0.2.0** under the pre-1.0 exception in §4, despite being a
 breaking change.
