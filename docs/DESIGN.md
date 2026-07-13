@@ -302,6 +302,13 @@ Per consuming app:
 - **Compatibility policy:** semver; breaking API changes bump major and the
   rollout to five repos is coordinated. Keep the API surface minimal to make
   breaking changes rare.
+  - **Pre-1.0 exception (Phill, 2026-07-13):** while the library is below
+    1.0.0, breaking changes bump MINOR instead of MAJOR (the standard "0.x.y
+    behaves like x.y.z" convention). 1.0.0 is reserved for when the rollout is
+    actually complete — phase 6 (frontiers) merged and the phase 7 frontend
+    package shipped — so it can truthfully mean "the API is stable," not just
+    "we made an incompatible change." First application: the job-log storage
+    redesign (§8) ships as v0.2.0 despite being a breaking change.
 
 ## 5. Rollout plan
 
@@ -379,6 +386,164 @@ react-bootstrap, react-router-dom, react-query flavor/version. Audit needed.
 6. **Logs endpoint:** confirmed — `getJobLogs` + `GET /api/jobs/logs/{id}`.
 7. **`JobRateLimit`:** property optional; default 200 ms, warn-and-default on
    unparseable values (matches courses' behavior).
+
+## 8. Job-log storage redesign (v0.2.0, in progress 2026-07-13)
+
+**Origin:** the single `jobs.log` TEXT column, appended to via read-modify-write
+on every `ctx.log()` call, is a design inherited from the original forks' era
+of Heroku's free Postgres tier, which capped total *rows* across the whole
+database (not bytes) — cramming an entire job's log into one row-column was a
+real workaround for that constraint. That constraint no longer exists for any
+of the five apps' current hosting (dokku), so it's worth revisiting purely on
+technical merits.
+
+**The problem with the current design:** `ctx.log()` does
+`job.setLog(previousLog + "\n" + message)`. Java strings are immutable, so
+this copies the *entire* existing log on every call — O(N²) total character
+copying across N log lines. This isn't just a JVM-side cost: neither Postgres
+nor MySQL has a true in-place "append" for a TEXT column (both use MVCC, where
+an UPDATE always writes a new row version, so even a DB-side
+`log = log || newtext` rewrites data proportional to the *total* new size, not
+the delta). There's no cheap fix that keeps a single growing TEXT column and
+avoids this — it's structural to how both engines store mutable variable-length
+values.
+
+**The stronger motivation is safety, not performance.** While scoping the
+interruptibility feature (§9), a real bug surfaced: `ctx.log()`'s full-entity
+`save(job)` would silently clobber a `status` change made by a concurrent
+writer (e.g., a future cancel-request endpoint), because the in-memory `Job`
+object `JobContext` holds is stale relative to the DB the moment any other
+transaction touches that row. Splitting logs into their own table removes this
+bug *by construction*: an INSERT-only `job_logs` table has no shared row to
+clobber, rather than relying on every future log-adjacent change remembering
+to use a targeted UPDATE.
+
+**Schema:**
+
+```
+job_logs
+  id          BIGINT IDENTITY PK
+  job_id      BIGINT FK -> jobs.id   (real FK: both tables are library-owned)
+  message     TEXT
+  created_at  TIMESTAMP
+```
+
+`jobs.log` is dropped. `JobService.getJobLogs(id)` (the `/logs/{id}` full-log
+endpoint) is rewritten to assemble the log from `job_logs`, joined in **Java**
+(fetch ordered rows, `String.join("\n", ...)`) rather than DB-side string
+aggregation (`string_agg`/`GROUP_CONCAT`), to stay portable across H2 (tests)
+and Postgres (prod) without engine-specific SQL.
+
+**Compatibility, deliberately preserved:** `JobContext` keeps its existing
+two-arg constructor (`JobContext(JobsRepository, Job)`) working exactly as
+today — delegating to a new constructor with the log repository unset — so
+the null-repository test seam (`new JobContext(null, job)`, used by every
+`TestJob` unit test across all four migrated apps) keeps accumulating
+in-memory and compiling unchanged. `Job.builder().log(...)` / `getLog()` also
+stay untouched as plain Java fields, since existing controller-test fixtures
+construct `Job` directly with no persistence involved. Net effect: this
+redesign does **not** require touching any consuming app's existing test code.
+
+**The one real breaking change:** `GET /api/jobs/paginated` and `/all` stop
+returning each job's full log content — only a tail preview (last ~10-20
+lines) — since shipping full log text for every row on a list page is the
+inefficiency actually worth fixing (today, courses/scaffold already truncate
+to 10 lines client-side and would see no visible change; happycows'
+`PagedJobsTable` currently renders the *entire* log inline with no
+truncation and will need a "view full log" page added, scoped as a small
+follow-up in happycows' own version-bump PR, not a blocker for this release).
+Single-job fetch (`getJobById`, `/logs/{id}`) is unaffected — full content,
+same as today.
+
+**Filtering and full-field sort (Phill, 2026-07-13), folded into this same
+release since it touches the same endpoint:** `/paginated`'s sort allowlist
+widens to every sortable `Job` column (`id`, `jobName`, `status`,
+`createdByEmail`, `scopeType`, `scopeId`, `createdAt`, `updatedAt` — not
+`log`, now in its own table and not meaningfully sortable). The endpoint also
+gains optional filter query params — one per filterable field, exact match
+for categorical fields (`status`, `scopeType`, `scopeId`), case-insensitive
+contains for `jobName`/`createdByEmail` — composed via Spring Data's
+`JpaSpecificationExecutor<Job>` rather than a combinatorial set of repository
+methods or hand-built JPQL: each present param contributes one `Predicate` to
+a dynamically composed `Specification<Job>`, absent params contribute
+nothing, and `jobsRepository.findAll(spec, pageRequest)` handles any
+combination of filters × sort field × page size in one call. Chosen over a
+generic filter-expression/query-language endpoint as the better fit for a
+teaching codebase (standard, well-known Spring Data pattern, not a new DSL to
+learn) per Appendix B's reasoning for keeping the API surface simple. Page
+size itself (10/25/50 etc.) was already just `pageSize`, no backend change.
+
+**Rollout, lowest-risk-first (Phill, 2026-07-13):** ship in lib-jobs, pilot in
+**proj-dining first** — no real users yet, and no historical log data to
+backfill (unlike scaffold/courses/happycows, which each need a backfill step
+copying existing `jobs.log` text into `job_logs` before the column drops).
+Prove it live on dokku, then roll the same version out to the other three
+migrated apps (each with its own backfill changeset) before frontiers.
+
+**Versioned as v0.2.0** under the pre-1.0 exception in §4, despite being a
+breaking change.
+
+## 9. Job cancellation (deferred, design only — not yet built)
+
+Sequenced *after* §8 lands and stabilizes, because the mechanism hooks
+directly into `ctx.log()`'s write path and shouldn't be built against a write
+path that's simultaneously changing underneath it.
+
+**Design, as discussed with Phill (2026-07-13):**
+
+- New non-terminal `Job.status` value `cancelling` — set by a new
+  `POST /api/jobs/{id}/cancel`, meaning "requested, not yet honored." A
+  **soft-kill** (set status to a terminal `cancelled` immediately on request,
+  regardless of whether the job body ever notices) was considered and
+  rejected: it doesn't stop a single line of the job's execution — every
+  API call, every DB write, every side effect still happens exactly as if
+  never clicked — so it produces a UI that's actively *more* misleading than
+  no button at all (it tells the admin the problem is handled when it isn't).
+  `cancelled` is reserved as a terminal status that only results from the job
+  body actually stopping.
+- **Piggyback the check on `ctx.log()`** (Phill's suggestion): since job
+  bodies already call `ctx.log()` at natural checkpoints (loop iterations,
+  before/after external calls), checking cancellation there gives checkpoint
+  coverage for free, with no retroactive changes to existing job bodies.
+  Order matters: log the message *first*, then check — so the log always
+  shows "got this far" before the job stops, and a kill request that arrives
+  mid-blocking-call (e.g. mid-`RestTemplate` call) is honored at the next
+  checkpoint immediately after that call returns (Java's interrupt/flag state
+  is never "lost" while blocked — see the Java thread-interruption discussion
+  in the 2026-07-13 session notes — it's simply latent until something checks
+  it, which is exactly what the post-log check provides).
+  - Escape hatch for job bodies that must not be interrupted at a specific
+    log point: `ctx.logNoCancelCheck(...)`, same log-and-persist behavior,
+    skips the check. Expected to be the uncommon case.
+- `JobService.runJobAsync` gets one more catch clause ahead of the general
+  `Exception` handler: a new `JobCancelledException` → `status="cancelled"`.
+- **Queued (not yet running) jobs are the one case that's fully, instantly,
+  honestly killable**: nothing is executing yet, so the cancel endpoint can
+  set `cancelled` directly with zero ambiguity, and `JobService` just needs to
+  skip invoking the job body if it was already cancelled by the time the
+  executor picks it up.
+- **Hard-kill (`Thread.interrupt()` via `Future.cancel(true)`) rejected** as
+  the primary mechanism: plain blocking `RestTemplate` calls (all five apps'
+  current usage — verified against scaffold's `new RestTemplate()`, no
+  Apache HttpClient/OkHttp on the classpath) don't respond to
+  `Thread.interrupt()` at all while blocked, so it wouldn't reliably stop the
+  slow-external-API case that actually motivates wanting a kill button. It
+  also risks a real correctness bug: `jobsExecutor`'s threads are pooled and
+  reused (that's the single-thread-FIFO design), so a leftover interrupt flag
+  on a thread returned to the pool can spuriously interrupt the *next*,
+  unrelated queued job the moment it calls `Thread.sleep()` — a known Java
+  concurrency pitfall (interrupt-status leakage across pooled-thread task
+  boundaries) that a naive implementation would need to defensively guard
+  against for no real gain over cooperative checking.
+
+**Also deferred, related:** detecting jobs left `running`/`queued` after a
+server crash (today's known limitation — the in-memory executor queue is lost
+on restart, and those rows stay `running` forever). Cleanly solvable with a
+one-time sweep on `ApplicationReadyEvent` at startup (not a periodic poll —
+restart is a discrete, unambiguous event: anything still marked
+running/queued at boot is guaranteed orphaned in the org's current
+single-instance-per-app deployment model). No schema change strictly required
+(reuses `status`, or adds a distinct `interrupted` value for a clearer UI).
 
 ## Appendix A: Drift survey (as of 2026-07-12, all repos' `main`)
 
