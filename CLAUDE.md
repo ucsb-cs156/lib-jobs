@@ -64,22 +64,40 @@ when decisions change.
       Lesson for phases 4-6: budget for a live smoke test after each merge,
       not just green CI — scaffold has no integration/web-IT workflow, so
       neither regression would have been caught by CI alone.
-- [ ] Phase 4: proj-courses — code complete 2026-07-13, PR
-      ucsb-cs156/proj-courses#314 (open). Backend 416 tests / jacoco 100% /
-      pitest 571/571; frontend 639 tests. Uses config to preserve
-      pre-migration behavior rather than silently changing it: executor
-      pool-size 2/2/500 (library defaults to single-thread), and
-      app.jobs.rate-limit-ms reads the same RATE_LIMIT_DELAY_MS env var as
-      before. Added JobContext.getJob() to the library (v0.1.6) — courses'
-      GradeHistoryImportServiceImplTests needed to inspect job state after
-      running a job body, a gap the other three migrations hadn't hit.
-      Found and closed a pre-existing gap: the admin UI had a working "Test
-      Job" launch form with no backend endpoint at all; added one (also
-      needed for this migration's own live smoke test). Two drive-by fixes
-      unrelated to lib-jobs, needed for a clean `mvn test` (both noted in the
-      PR): a missing mock bean in an unrelated controller test, and a
-      misplaced test file moved to match its subject's package.
-- [ ] Phases 5–6: proj-happycows, proj-frontiers (frontiers last — scope migration)
+- [x] Phase 4: proj-courses — merged 2026-07-13, PR ucsb-cs156/proj-courses#314.
+      Backend 416 tests / jacoco 100% / pitest 571/571; frontend 639 tests.
+      Uses config to preserve pre-migration behavior rather than silently
+      changing it: executor pool-size 2/2/500 (library defaults to
+      single-thread), and app.jobs.rate-limit-ms reads the same
+      RATE_LIMIT_DELAY_MS env var as before. Added JobContext.getJob() to the
+      library (v0.1.6) — courses' GradeHistoryImportServiceImplTests needed to
+      inspect job state after running a job body, a gap the other three
+      migrations hadn't hit. Found and closed a pre-existing gap: the admin UI
+      had a working "Test Job" launch form with no backend endpoint at all;
+      added one (also needed for this migration's own live smoke test, which
+      passed on dokku). Two drive-by fixes unrelated to lib-jobs, needed for a
+      clean `mvn test` (both noted in the PR): a missing mock bean in an
+      unrelated controller test, and a misplaced test file moved to match its
+      subject's package.
+- [ ] Phase 5: proj-happycows — code complete 2026-07-13, PR
+      ucsb-cs156/proj-happycows#270 (open). Backend 283 tests / jacoco 100% /
+      pitest 483/483; frontend 654 tests. **No lib-jobs changes needed** — the
+      first migration to work against an existing release with zero library
+      changes. Oldest/most-drifted fork per the original survey: no
+      JobContextFactory (constructed JobContext inline), no JobRateLimit, no
+      Liquibase FK on created_by_id needed an explicit drop
+      (FK_JOBS_USERS). Its custom `/all/pageable` endpoint (fixed sort by id,
+      param `size`) had no library equivalent, so it's replaced by the
+      library's `/paginated` with explicit sortField=id&sortDirection=DESC —
+      frontend PagedJobsTable.jsx updated accordingly. Simplified two
+      controller tests that wired the real JobService through a WebMvcTest
+      and asserted exact internal save() call counts (brittle, coupled to the
+      deleted JobService's implementation) to the mock-based convention used
+      by every other migration; restored the resulting TestJob branch/timing
+      coverage with direct unit tests, matching dining/scaffold/courses'
+      pattern. No git-code-format plugin configured in this repo (unlike the
+      other four) — confirmed via its CI workflows, not just absence in pom.xml.
+- [ ] Phase 6: proj-frontiers (last — needs the Course→scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.
