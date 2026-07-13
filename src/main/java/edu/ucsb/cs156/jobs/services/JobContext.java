@@ -48,4 +48,12 @@ public class JobContext {
       jobsRepository.save(job);
     }
   }
+
+  /**
+   * Exposes the underlying job, mainly so job bodies and their tests can inspect state (e.g. {@code
+   * ctx.getJob().getLog()}) without threading a separate reference through.
+   */
+  public Job getJob() {
+    return job;
+  }
 }

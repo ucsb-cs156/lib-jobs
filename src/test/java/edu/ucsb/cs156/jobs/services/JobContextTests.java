@@ -33,6 +33,17 @@ public class JobContextTests {
   }
 
   @Test
+  public void getJob_exposes_the_underlying_job() {
+    Job job = Job.builder().build();
+    JobContext context = new JobContext(jobsRepository, job);
+
+    context.log("some progress");
+
+    assertEquals(job, context.getJob());
+    assertEquals("some progress", context.getJob().getLog());
+  }
+
+  @Test
   public void subsequent_log_lines_append_with_newline() {
     Job job = Job.builder().log("first line").build();
     JobContext context = new JobContext(jobsRepository, job);
