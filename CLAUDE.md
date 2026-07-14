@@ -97,6 +97,51 @@ when decisions change.
       coverage with direct unit tests, matching dining/scaffold/courses'
       pattern. No git-code-format plugin configured in this repo (unlike the
       other four) — confirmed via its CI workflows, not just absence in pom.xml.
+- [ ] **v0.2.0 interstitial release** (2026-07-14): job-log storage redesign
+      — see DESIGN.md §8. Replaces the single `jobs.log` TEXT column with a
+      normalized `job_logs` table (fixes an O(N²) read-modify-write and a
+      status-clobbering bug the old design enabled); `/paginated` gains
+      optional filter params + a widened sort allowlist; new
+      `GET /logs/{id}/tail?afterId=` for incremental live-tailing. Backend
+      library: 61 tests, jacoco 100%, pitest 100%. Tagged and verified on
+      JitPack (`com.github.ucsb-cs156:lib-jobs:v0.2.0` resolves).
+
+      **This supersedes phases 5/6 below as the immediate next step** — per
+      DESIGN.md §8's revised rollout (lowest-risk-first, decided with Phill
+      2026-07-13): **dining** (piloting now — no real users, no historical
+      log data to backfill) **→ scaffold → courses → v0.3.0** (job
+      cancellation, §9, design-only, not yet built) **→ happycows** (picks up
+      v0.2.0 and v0.3.0 together, deliberately held back since it's
+      mission-critical) **→ frontiers** (last regardless, still needs the
+      Course→scope migration). Phase 5 (happycows PR #270) and phase 6
+      (frontiers) below stay open but are on hold until this sequence reaches
+      them.
+
+      Status as of 2026-07-14: dining pilot PR
+      ucsb-cs156/proj-dining#132 open (bumps lib-jobs to v0.2.0; no app-level
+      code or Liquibase changes needed — the `job_logs` changeset ships
+      inside the library jar's own changelog, which dining already includes
+      wholesale). Backend-only verification done (tests/jacoco/pitest all
+      green); CI was running as of this writing. **Still to do before
+      merging:** confirm CI is green, then a live dokku smoke test of
+      `/api/jobs/all`, `/api/jobs/logs/{id}`, and the new
+      `/api/jobs/logs/{id}/tail` (dining has no frontend jobs UI yet, so this
+      is via Swagger/curl, not a UI click-through). After dining merges and
+      is smoke-tested live, roll the same version bump out to scaffold, then
+      courses, one at a time, each needing its own backfill Liquibase
+      changeset (copying existing `jobs.log` text into `job_logs`) since
+      unlike dining they have real historical log data.
+
+      **Known environment gotcha hit during the dining pilot:** committing
+      from a `git worktree` (the established isolation pattern for these
+      migrations) fails git-code-format-maven-plugin's pre-commit hook with
+      a JGit "Bare Repository has neither a working tree, nor an index"
+      error, even though the hook script itself has the correct per-worktree
+      pom.xml path. Root cause not fully diagnosed; workaround (confirmed
+      with Phill) is `git commit --no-verify` since the equivalent
+      `validate-code-format` check already passes via `mvn verify` and CI
+      re-runs it server-side anyway. Expect to hit this again on the
+      scaffold/courses migrations.
 - [ ] Phase 6: proj-frontiers (last — needs the Course→scope migration)
 - [ ] Phase 7: frontend package in `frontend/`
 
