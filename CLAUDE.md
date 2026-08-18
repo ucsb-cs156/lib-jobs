@@ -117,20 +117,79 @@ when decisions change.
       (frontiers) below stay open but are on hold until this sequence reaches
       them.
 
-      Status as of 2026-07-14: dining pilot PR
-      ucsb-cs156/proj-dining#132 open (bumps lib-jobs to v0.2.0; no app-level
-      code or Liquibase changes needed — the `job_logs` changeset ships
-      inside the library jar's own changelog, which dining already includes
-      wholesale). Backend-only verification done (tests/jacoco/pitest all
-      green); CI was running as of this writing. **Still to do before
-      merging:** confirm CI is green, then a live dokku smoke test of
-      `/api/jobs/all`, `/api/jobs/logs/{id}`, and the new
-      `/api/jobs/logs/{id}/tail` (dining has no frontend jobs UI yet, so this
-      is via Swagger/curl, not a UI click-through). After dining merges and
-      is smoke-tested live, roll the same version bump out to scaffold, then
-      courses, one at a time, each needing its own backfill Liquibase
-      changeset (copying existing `jobs.log` text into `job_logs`) since
-      unlike dining they have real historical log data.
+      Status as of 2026-08-16: dining pilot PR ucsb-cs156/proj-dining#132
+      **merged** (bumped lib-jobs to v0.2.0; no app-level code or Liquibase
+      changes needed — the `job_logs` changeset ships inside the library
+      jar's own changelog, which dining already includes wholesale). CI green
+      (10/10 checks), live dokku smoke test of `/api/jobs/all`,
+      `/api/jobs/logs/{id}`, and `/api/jobs/logs/{id}/tail` passed (Phill,
+      manual redeploy + curl/Swagger since dining has no frontend jobs UI).
+
+      **Scaffold** PR ucsb-cs156/proj-scaffold#118 **merged** 2026-08-17:
+      backend 830 tests / jacoco 100%, verified live on a fresh QA dokku
+      (clean migration-from-scratch run against real historical `jobs.log`
+      data, backfill confirmed byte-for-byte correct). Needed a two-changeset
+      backfill (`jobs.log` → staging column → `job_logs`, split around the
+      library's own changeset since it creates `job_logs` and drops
+      `jobs.log` atomically in one unit — no room to inject a copy in
+      between) and, unlike dining, includes only the library's
+      `002-job-logs-table` changeset rather than its whole
+      `changelog-master.json`, since scaffold already owns a `jobs` table
+      from its phase-3 migration and re-running the library's
+      `001-create-jobs-table` would collide with it. Also caught a real bug
+      during smoke-testing: `jobsByCourse` (an app-owned endpoint returning
+      raw `Job` entities) showed blank logs everywhere, because `Job.log`
+      went from a real persisted column (auto-populated by Hibernate) to
+      `@Transient` in v0.2.0 — fixed by explicitly populating it via
+      `JobService.getJobLogPreview`, same as the library's own controller
+      does. No other frontend changes needed.
+
+      **Courses — Liquibase infrastructure now merged (2026-08-18), v0.2.0
+      bump itself not yet started.** Before courses could get the same
+      recipe as scaffold, it needed Liquibase at all — it was still on
+      Hibernate `ddl-auto=update`. That work (ucsb-cs156/proj-courses#316,
+      pre-existing when this session picked it up) hit the exact same
+      "table already exists" collision scaffold did, but for *every* table,
+      not just `jobs` — Hibernate had already created all of them in
+      dev/QA/prod. Already fixed there (before this session) with
+      `preConditions`/`MARK_RAN` guards per changeset, `jobs` included, via
+      a locally-owned changeset rather than `include`-ing the library's
+      changelog (confirms scaffold's approach was right all along; an
+      earlier draft of that PR's survey doc had it backwards). Two more
+      issues surfaced getting #316 green: a `commons-io`/`commons-compress`
+      Maven nearest-wins conflict breaking embedded-Mongo test setup on
+      every fresh CI run (fixed, `commons-io` pinned to 2.20.0), and a
+      pre-existing bug where an unguarded UCSB API call crashed the whole
+      app on startup if the key was missing/invalid — fixed separately as
+      ucsb-cs156/proj-courses#318 (merged), which also introduced a
+      reusable `SystemMessage`/`SystemMessagesService` mechanism
+      (ucsb-cs156/proj-courses#319, merged) so misconfiguration now shows as
+      a banner under the navbar instead of either crashing the app or only
+      showing up in server logs. None of this is lib-jobs-specific, but it's
+      why courses' v0.2.0 bump took this long to become unblocked.
+
+      **Next up: courses' actual v0.2.0 bump.** Same recipe as scaffold —
+      bump the `lib-jobs` dependency, add the stage/complete backfill
+      changeset pair, include only `002-job-logs-table.json` (courses now
+      owns its `jobs` table via its own guarded changeset, `009-create-
+      jobs-table.json`, same shape as scaffold's situation) — plus courses'
+      own analog of the `jobsByCourse` bug scaffold hit: grep for any
+      app-owned endpoint returning raw `Job` entities without an explicit
+      `getJobLogPreview`/`getJobLogs` call, since that bug class will
+      reproduce anywhere `Job.log`'s column-to-`@Transient` change isn't
+      accounted for. Not yet started.
+
+      **New app added to the rollout (Phill, 2026-08-16):
+      `ucsb-cs156/proj-citelines`** — not one of the original five forks;
+      built as a lib-jobs consumer from day one (pom.xml already on v0.1.5,
+      no homegrown jobs code to retrofit), but still needs the v0.2.0 bump +
+      backfill (still has the old single `log` column, real job history from
+      `GetCitationsJob`/`CheckLinksJob`/etc.). Slot it into the rollout
+      sequence — exact position TBD — and fold it into DESIGN.md §8's
+      rollout list next time that doc is updated. Two follow-up passes
+      confirmed for citelines specifically (and eventually every app): v0.3.0
+      job interruptability, then factoring frontend jobs components into the
+      `frontend/` npm package (phase 7).
 
       **Known environment gotcha hit during the dining pilot:** committing
       from a `git worktree` (the established isolation pattern for these
