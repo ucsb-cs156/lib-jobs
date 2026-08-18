@@ -168,16 +168,49 @@ when decisions change.
       showing up in server logs. None of this is lib-jobs-specific, but it's
       why courses' v0.2.0 bump took this long to become unblocked.
 
-      **Next up: courses' actual v0.2.0 bump.** Same recipe as scaffold —
-      bump the `lib-jobs` dependency, add the stage/complete backfill
-      changeset pair, include only `002-job-logs-table.json` (courses now
-      owns its `jobs` table via its own guarded changeset, `009-create-
-      jobs-table.json`, same shape as scaffold's situation) — plus courses'
-      own analog of the `jobsByCourse` bug scaffold hit: grep for any
-      app-owned endpoint returning raw `Job` entities without an explicit
-      `getJobLogPreview`/`getJobLogs` call, since that bug class will
-      reproduce anywhere `Job.log`'s column-to-`@Transient` change isn't
-      accounted for. Not yet started.
+      **Courses' v0.2.0 bump: PR ucsb-cs156/proj-courses#321 open, CI green
+      (2026-08-18).** Same recipe as scaffold — bumped the `lib-jobs`
+      dependency, added the stage/complete backfill changeset pair
+      (`010`/`changes-post-lib-jobs/011`), included only
+      `002-job-logs-table.json` (courses owns its `jobs` table via its own
+      guarded changeset, `009-create-jobs-table.json`). Checked for
+      courses' own analog of the `jobsByCourse` bug scaffold hit — clean,
+      courses' own `JobsController` has only launch endpoints, no listing
+      endpoints of its own, so no app-code fix was needed there.
+
+      Did hit a **new, different bug class** getting CI green:
+      `AsyncJobTestsIT` (a pre-existing integration test) mocked
+      `JobsRepository`, so the launched job's `id` stayed at Java's default
+      `0`. Harmless under v0.1.x (`ctx.log()` only mutated an in-memory
+      field), but v0.2.0's `ctx.log()` writes real, FK-constrained rows to
+      `job_logs` — every log line the job wrote violated
+      `FK_JOB_LOGS_JOBS`, landing the job in `"error"` status
+      deterministically, every run, not flakily. **Generalizes beyond
+      courses**: any app with an integration test that mocks
+      `JobsRepository` (or otherwise never gives a launched `Job` a real
+      persisted id) while exercising real job execution will hit this on
+      its own v0.2.0 bump — check for the pattern proactively on
+      happycows/citelines/frontiers rather than waiting for CI to find it.
+      Fixed by no longer mocking `JobsRepository` in that test. While
+      already touching it, also fixed the already-tracked
+      ucsb-cs156/proj-courses#320 race (asserting a job's status
+      immediately after launch reads a field a background thread may
+      already be writing to — asserted `assertNotEquals("complete", ...)`
+      instead).
+
+      Backend: 421 tests / jacoco 100%; full integration suite
+      (`INTEGRATION=true mvn test-compile failsafe:integration-test
+      failsafe:verify`) passing. **Still needed before merging:** live
+      dokku smoke test of the backfill against real historical `jobs.log`
+      data (same as scaffold — H2/fresh-dev-DB both start empty, so the
+      backfill `INSERT` is a no-op in every automated check so far).
+
+      **Next up after courses merges: v0.3.0** (job cancellation, §9,
+      design-only, not yet built) is next in the stated sequence, but
+      check with Phill before starting it — happycows/citelines still need
+      their own v0.2.0 bumps first and it may make sense to knock those out
+      (now straightforward, following the established recipe) before
+      building a new library feature.
 
       **New app added to the rollout (Phill, 2026-08-16):
       `ucsb-cs156/proj-citelines`** — not one of the original five forks;
