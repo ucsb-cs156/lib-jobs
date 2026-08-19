@@ -198,31 +198,48 @@ when decisions change.
       already be writing to — asserted `assertNotEquals("complete", ...)`
       instead).
 
-      Backend: 421 tests / jacoco 100%; full integration suite
-      (`INTEGRATION=true mvn test-compile failsafe:integration-test
-      failsafe:verify`) passing. **Still needed before merging:** live
-      dokku smoke test of the backfill against real historical `jobs.log`
-      data (same as scaffold — H2/fresh-dev-DB both start empty, so the
-      backfill `INSERT` is a no-op in every automated check so far).
+      **Merged 2026-08-19** (as `ucsb-cs156/proj-courses#321`). Live-
+      verified on `courses-qa`: backfill diffed byte-for-byte correct
+      against a real historical job's log (job 631 — first paste came
+      back with newlines flattened to spaces, traced to how the browser
+      copy-pasted it, not a real bug; re-verified via a clean paste,
+      MD5-identical). Backend: 421 tests / jacoco 100%.
 
-      **Next up after courses merges: v0.3.0** (job cancellation, §9,
-      design-only, not yet built) is next in the stated sequence, but
-      check with Phill before starting it — happycows/citelines still need
-      their own v0.2.0 bumps first and it may make sense to knock those out
-      (now straightforward, following the established recipe) before
-      building a new library feature.
+      Also needed a **separate, unrelated fix along the way**:
+      `ucsb-cs156/proj-courses#324`, merged first — a Liquibase
+      `validCheckSums` fix plus a guarded rename changeset, for an
+      environment (a QA dokku instance) that had run an *early* version
+      of #316's branch, before a same-PR follow-up commit corrected
+      `pass1_begin`/`pass2_begin`/`pass3_begin` to
+      `pass1begin`/`pass2begin`/`pass3begin` (Hibernate's naming
+      strategy never actually matched the underscored names — a
+      pre-existing bug, not something #316 introduced). This blocked
+      deploying plain `main` to that instance, not just #321. Lesson:
+      never edit a changeset's content after it may have been applied
+      anywhere, even mid-PR before merging — use `validCheckSums`
+      instead if a genuine fix is needed post-hoc.
 
-      **New app added to the rollout (Phill, 2026-08-16):
-      `ucsb-cs156/proj-citelines`** — not one of the original five forks;
-      built as a lib-jobs consumer from day one (pom.xml already on v0.1.5,
-      no homegrown jobs code to retrofit), but still needs the v0.2.0 bump +
-      backfill (still has the old single `log` column, real job history from
-      `GetCitationsJob`/`CheckLinksJob`/etc.). Slot it into the rollout
-      sequence — exact position TBD — and fold it into DESIGN.md §8's
-      rollout list next time that doc is updated. Two follow-up passes
-      confirmed for citelines specifically (and eventually every app): v0.3.0
-      job interruptability, then factoring frontend jobs components into the
-      `frontend/` npm package (phase 7).
+      **Courses is fully done.** No further courses-specific work
+      queued.
+
+      **Next up: citelines' v0.2.0 bump** (Phill, 2026-08-19 — chosen
+      over starting v0.3.0 now). Unlike courses, citelines already has
+      Liquibase infrastructure from day one (confirmed:
+      `ddl-auto=none`, `spring.liquibase.change-log` configured) — no
+      courses-style Hibernate-to-Liquibase detour expected. Should be a
+      straightforward repeat of the scaffold/courses recipe. Not yet
+      started this round.
+
+      (`proj-citelines` background: added to the rollout by Phill on
+      2026-08-16, not one of the original five forks — built as a
+      lib-jobs consumer from day one, pom.xml already on v0.1.5, no
+      homegrown jobs code to retrofit. Still has the old single `log`
+      column and real job history from `GetCitationsJob`/
+      `CheckLinksJob`/etc. Fold it into DESIGN.md §8's rollout list next
+      time that doc is updated. Two follow-up passes confirmed for
+      citelines specifically, and eventually every app: v0.3.0 job
+      interruptability, then factoring frontend jobs components into the
+      `frontend/` npm package, phase 7.)
 
       **Known environment gotcha hit during the dining pilot:** committing
       from a `git worktree` (the established isolation pattern for these
