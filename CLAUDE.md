@@ -79,8 +79,10 @@ when decisions change.
       clean `mvn test` (both noted in the PR): a missing mock bean in an
       unrelated controller test, and a misplaced test file moved to match its
       subject's package.
-- [ ] Phase 5: proj-happycows — code complete 2026-07-13, PR
-      ucsb-cs156/proj-happycows#270 (open). Backend 283 tests / jacoco 100% /
+- [x] Phase 5: proj-happycows — code complete 2026-07-13, PR
+      ucsb-cs156/proj-happycows#270 (merged 2026-08-08 — this checklist
+      wasn't updated at the time; caught while building `docs/STATUS.md`
+      2026-08-19). Backend 283 tests / jacoco 100% /
       pitest 483/483; frontend 654 tests. **No lib-jobs changes needed** — the
       first migration to work against an existing release with zero library
       changes. Oldest/most-drifted fork per the original survey: no
@@ -113,9 +115,9 @@ when decisions change.
       cancellation, §9, design-only, not yet built) **→ happycows** (picks up
       v0.2.0 and v0.3.0 together, deliberately held back since it's
       mission-critical) **→ frontiers** (last regardless, still needs the
-      Course→scope migration). Phase 5 (happycows PR #270) and phase 6
-      (frontiers) below stay open but are on hold until this sequence reaches
-      them.
+      Course→scope migration). Phase 5 (happycows PR #270) merged since this
+      was written; phase 6 (frontiers) below stays open and is on hold until
+      this sequence reaches it.
 
       Status as of 2026-08-16: dining pilot PR ucsb-cs156/proj-dining#132
       **merged** (bumped lib-jobs to v0.2.0; no app-level code or Liquibase
@@ -255,14 +257,17 @@ when decisions change.
       doc is updated.)
 
       **Next up:** decide between starting v0.3.0 (job cancellation,
-      DESIGN.md §9, design-only so far) or happycows' v0.2.0 bump
-      (PR ucsb-cs156/proj-happycows#270 still open from phase 5,
-      deliberately held back to pair with v0.3.0 — may be revisited now
-      that four of six apps are done). frontiers remains last regardless
-      (needs the Course→scope migration too). Two follow-up passes
-      confirmed for every app once v0.3.0 exists: job interruptability,
-      then factoring frontend jobs components into the `frontend/` npm
-      package, phase 7. Not yet decided this round — check with Phill.
+      DESIGN.md §9, design-only so far) or another app's v0.2.0 bump.
+      **Happycows is explicitly frozen for any higher-risk lib-jobs work
+      (its v0.2.0 bump included) until mid-September 2026** (Phill,
+      2026-08-19) — it's mission-critical and already migrated to lib-jobs
+      v0.1.6 via PR ucsb-cs156/proj-happycows#270 (merged 2026-08-08), it
+      just isn't getting bumped further for now. All other apps are fair
+      game in the meantime: frontiers remains last regardless (needs the
+      Course→scope migration too), so realistically that leaves v0.3.0
+      itself as the next candidate. Two follow-up passes confirmed for
+      every app once v0.3.0 exists: job interruptability, then factoring
+      frontend jobs components into the `frontend/` npm package, phase 7.
 
       **Known environment gotcha hit during the dining pilot:** committing
       from a `git worktree` (the established isolation pattern for these
