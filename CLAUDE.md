@@ -222,24 +222,47 @@ when decisions change.
       **Courses is fully done.** No further courses-specific work
       queued.
 
-      **Next up: citelines' v0.2.0 bump** (Phill, 2026-08-19 — chosen
-      over starting v0.3.0 now). Unlike courses, citelines already has
-      Liquibase infrastructure from day one (confirmed:
-      `ddl-auto=none`, `spring.liquibase.change-log` configured) — no
-      courses-style Hibernate-to-Liquibase detour expected. Should be a
-      straightforward repeat of the scaffold/courses recipe. Not yet
-      started this round.
+      **Citelines' v0.2.0 bump: done — PR ucsb-cs156/proj-citelines#97
+      merged 2026-08-19.** Unlike courses, citelines already had Liquibase
+      infrastructure from day one (`ddl-auto=none`,
+      `spring.liquibase.change-log` configured), so it was a clean repeat
+      of the scaffold/courses recipe with no Hibernate-to-Liquibase
+      detour: bumped `lib-jobs` to v0.2.0, added the two-changeset
+      stage/complete backfill pair (`041-stage-jobs-log-backfill` /
+      `changes-post-lib-jobs/042-complete-jobs-log-backfill`), included
+      only `002-job-logs-table.json` (citelines owns its `jobs` table via
+      its own guarded changeset). Backend 700/700 tests, jacoco 100%. Hit
+      and fixed both known bug classes proactively before any deploy: the
+      `jobsByProject` blank-log bug (raw `Job` entities returned directly,
+      same fix pattern as scaffold's `jobsByCourse` — populate via
+      `jobService.getJobLogPreview` before serializing) and its
+      self-fulfilling mock-test companion (test reused the same mutable
+      object as both mock return value and expected JSON). Checked for
+      the `AsyncJobTestsIT`-style mocked-`JobsRepository` bug — clean, no
+      such pattern in citelines' tests. Live-verified on citelines-qa:
+      migration ran clean (`041` → library's `lib-jobs-002-job-logs-table`
+      → `042`, 125 rows affected, app started clean), job 58's backfilled
+      log byte-for-byte identical to the before-deployment snapshot, and
+      Phill ran three fresh jobs post-deploy to confirm live logging and
+      tailing all work correctly. CI green including `enforce`.
 
       (`proj-citelines` background: added to the rollout by Phill on
       2026-08-16, not one of the original five forks — built as a
       lib-jobs consumer from day one, pom.xml already on v0.1.5, no
-      homegrown jobs code to retrofit. Still has the old single `log`
-      column and real job history from `GetCitationsJob`/
-      `CheckLinksJob`/etc. Fold it into DESIGN.md §8's rollout list next
-      time that doc is updated. Two follow-up passes confirmed for
-      citelines specifically, and eventually every app: v0.3.0 job
-      interruptability, then factoring frontend jobs components into the
-      `frontend/` npm package, phase 7.)
+      homegrown jobs code to retrofit. Had the old single `log` column and
+      real job history from `GetCitationsJob`/`CheckLinksJob`/etc., now
+      migrated. Fold it into DESIGN.md §8's rollout list next time that
+      doc is updated.)
+
+      **Next up:** decide between starting v0.3.0 (job cancellation,
+      DESIGN.md §9, design-only so far) or happycows' v0.2.0 bump
+      (PR ucsb-cs156/proj-happycows#270 still open from phase 5,
+      deliberately held back to pair with v0.3.0 — may be revisited now
+      that four of six apps are done). frontiers remains last regardless
+      (needs the Course→scope migration too). Two follow-up passes
+      confirmed for every app once v0.3.0 exists: job interruptability,
+      then factoring frontend jobs components into the `frontend/` npm
+      package, phase 7. Not yet decided this round — check with Phill.
 
       **Known environment gotcha hit during the dining pilot:** committing
       from a `git worktree` (the established isolation pattern for these
