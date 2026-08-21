@@ -12,7 +12,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -20,8 +22,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Creates {@link Job} rows and runs {@link JobContextConsumer}s asynchronously on the {@code
  * jobsExecutor}, recording status and log output as they run.
  */
-<span class="fc" id="L23">@Slf4j</span>
-<span class="fc" id="L24">public class JobService {</span>
+<span class="fc" id="L25">@Slf4j</span>
+<span class="fc" id="L26">public class JobService {</span>
   @Autowired private JobsRepository jobsRepository;
 
   @Autowired private JobLogRepository jobLogRepository;
@@ -40,20 +42,20 @@ import org.springframework.transaction.support.TransactionTemplate;
 
   public Job runAsJob(JobContextConsumer jobFunction) {
     Job job =
-<span class="fc" id="L43">        Job.builder()</span>
-<span class="fc" id="L44">            .createdById(jobUserProvider.getCurrentUserId())</span>
-<span class="fc" id="L45">            .createdByEmail(jobUserProvider.getCurrentUserEmail())</span>
-<span class="fc" id="L46">            .status(&quot;queued&quot;)</span>
-<span class="fc" id="L47">            .jobName(jobFunction.getJobName())</span>
-<span class="fc" id="L48">            .scopeType(jobFunction.getScopeType())</span>
-<span class="fc" id="L49">            .scopeId(jobFunction.getScopeId())</span>
-<span class="fc" id="L50">            .build();</span>
+<span class="fc" id="L45">        Job.builder()</span>
+<span class="fc" id="L46">            .createdById(jobUserProvider.getCurrentUserId())</span>
+<span class="fc" id="L47">            .createdByEmail(jobUserProvider.getCurrentUserEmail())</span>
+<span class="fc" id="L48">            .status(&quot;queued&quot;)</span>
+<span class="fc" id="L49">            .jobName(jobFunction.getJobName())</span>
+<span class="fc" id="L50">            .scopeType(jobFunction.getScopeType())</span>
+<span class="fc" id="L51">            .scopeId(jobFunction.getScopeId())</span>
+<span class="fc" id="L52">            .build();</span>
 
-<span class="fc" id="L52">    jobsRepository.save(job);</span>
-<span class="fc" id="L53">    log.info(&quot;Queued job: {}, jobName={}&quot;, job.getId(), job.getJobName());</span>
-<span class="fc" id="L54">    self.runJobAsync(job, jobFunction);</span>
+<span class="fc" id="L54">    jobsRepository.save(job);</span>
+<span class="fc" id="L55">    log.info(&quot;Queued job: {}, jobName={}&quot;, job.getId(), job.getJobName());</span>
+<span class="fc" id="L56">    self.runJobAsync(job, jobFunction);</span>
 
-<span class="fc" id="L56">    return job;</span>
+<span class="fc" id="L58">    return job;</span>
   }
 
   /**
@@ -82,9 +84,9 @@ import org.springframework.transaction.support.TransactionTemplate;
      * re-fetching (the in-memory `job` is stale relative to that write)
      * and skipping the job body entirely if so.
      */
-<span class="fc" id="L85">    Job current = jobsRepository.findById(job.getId()).orElse(job);</span>
-<span class="fc bfc" id="L86" title="All 2 branches covered.">    if (&quot;cancelled&quot;.equals(current.getStatus())) {</span>
-<span class="fc" id="L87">      return;</span>
+<span class="fc" id="L87">    Job current = jobsRepository.findById(job.getId()).orElse(job);</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    if (&quot;cancelled&quot;.equals(current.getStatus())) {</span>
+<span class="fc" id="L89">      return;</span>
     }
 
     /*
@@ -92,49 +94,69 @@ import org.springframework.transaction.support.TransactionTemplate;
      * time by default); &quot;running&quot; is only truthful once we get here. This
      * save is outside the wrapping transaction, so it is visible immediately.
      */
-<span class="fc" id="L95">    job.setStatus(&quot;running&quot;);</span>
-<span class="fc" id="L96">    jobsRepository.save(job);</span>
+<span class="fc" id="L97">    job.setStatus(&quot;running&quot;);</span>
+<span class="fc" id="L98">    jobsRepository.save(job);</span>
 
-<span class="fc" id="L98">    JobContext context = contextFactory.createContext(job);</span>
+<span class="fc" id="L100">    JobContext context = contextFactory.createContext(job);</span>
 
     try {
-<span class="fc" id="L101">      transactionTemplate.executeWithoutResult(</span>
+<span class="fc" id="L103">      transactionTemplate.executeWithoutResult(</span>
           status -&gt; {
             try {
-<span class="fc" id="L104">              jobFunction.accept(context);</span>
+<span class="fc" id="L106">              jobFunction.accept(context);</span>
               /*lambdas cannot throw checked exceptions
               have to repackage as a runtime exception
               to catch outside transactional boundary*/
-<span class="fc" id="L108">            } catch (JobCancelledException e) {</span>
+<span class="fc" id="L110">            } catch (JobCancelledException e) {</span>
               // already unchecked; propagate as itself so the outer catch
               // below can tell a cancellation apart from a real error
-<span class="fc" id="L111">              throw e;</span>
-<span class="fc" id="L112">            } catch (Exception e) {</span>
-<span class="fc" id="L113">              throw new RuntimeException(e);</span>
-<span class="fc" id="L114">            }</span>
-<span class="fc" id="L115">          });</span>
-<span class="fc" id="L116">    } catch (JobCancelledException e) {</span>
-<span class="fc" id="L117">      job.setStatus(&quot;cancelled&quot;);</span>
-<span class="fc" id="L118">      jobsRepository.save(job);</span>
-<span class="fc" id="L119">      return;</span>
-<span class="fc" id="L120">    } catch (Exception e) {</span>
-<span class="fc" id="L121">      job.setStatus(&quot;error&quot;);</span>
-<span class="fc" id="L122">      jobsRepository.save(job);</span>
-<span class="fc" id="L123">      context.log(e.getMessage());</span>
-<span class="fc" id="L124">      return;</span>
-<span class="fc" id="L125">    }</span>
+<span class="fc" id="L113">              throw e;</span>
+<span class="fc" id="L114">            } catch (Exception e) {</span>
+<span class="fc" id="L115">              throw new RuntimeException(e);</span>
+<span class="fc" id="L116">            }</span>
+<span class="fc" id="L117">          });</span>
+<span class="fc" id="L118">    } catch (JobCancelledException e) {</span>
+<span class="fc" id="L119">      job.setStatus(&quot;cancelled&quot;);</span>
+<span class="fc" id="L120">      jobsRepository.save(job);</span>
+<span class="fc" id="L121">      return;</span>
+<span class="fc" id="L122">    } catch (Exception e) {</span>
+<span class="fc" id="L123">      job.setStatus(&quot;error&quot;);</span>
+<span class="fc" id="L124">      jobsRepository.save(job);</span>
+<span class="fc" id="L125">      context.log(e.getMessage());</span>
+<span class="fc" id="L126">      return;</span>
+<span class="fc" id="L127">    }</span>
 
-<span class="fc" id="L127">    job.setStatus(&quot;complete&quot;);</span>
-<span class="fc" id="L128">    jobsRepository.save(job);</span>
-<span class="fc" id="L129">  }</span>
+<span class="fc" id="L129">    job.setStatus(&quot;complete&quot;);</span>
+<span class="fc" id="L130">    jobsRepository.save(job);</span>
+<span class="fc" id="L131">  }</span>
+
+  /**
+   * Any job still {@code queued}, {@code running}, or {@code cancelling} at startup is guaranteed
+   * orphaned: {@code jobsExecutor}'s in-memory queue does not survive a restart, so nothing is
+   * actually executing (or about to execute, or checking for a cancellation request on) that job
+   * anymore, and it would otherwise stay stuck in that non-terminal status forever (see DESIGN.md
+   * §9's &quot;Also deferred, related&quot; note). Marks each as the terminal {@code interrupted} status so
+   * admins see an honest state instead of a phantom &quot;running&quot; (or &quot;cancelling&quot;) job that will never
+   * progress -- and, critically, so a stuck job from a *previous* run can never be mistaken for one
+   * still occupying the (single-threaded, by default) executor after this restart.
+   */
+  @EventListener(ApplicationReadyEvent.class)
+  public void recoverInterruptedJobsOnStartup() {
+<span class="fc" id="L145">    Iterable&lt;Job&gt; orphaned =</span>
+<span class="fc" id="L146">        jobsRepository.findByStatusIn(List.of(&quot;queued&quot;, &quot;running&quot;, &quot;cancelling&quot;));</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">    for (Job job : orphaned) {</span>
+<span class="fc" id="L148">      job.setStatus(&quot;interrupted&quot;);</span>
+<span class="fc" id="L149">      jobsRepository.save(job);</span>
+<span class="fc" id="L150">    }</span>
+<span class="fc" id="L151">  }</span>
 
   /** The full log for one job, oldest line first. */
   public String getJobLogs(Long jobId) {
-<span class="fc bfc" id="L133" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
-<span class="fc" id="L134">      throw new EntityNotFoundException(Job.class, jobId);</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
+<span class="fc" id="L156">      throw new EntityNotFoundException(Job.class, jobId);</span>
     }
-<span class="fc" id="L136">    List&lt;JobLog&gt; entries = jobLogRepository.findByJobIdOrderByIdAsc(jobId);</span>
-<span class="fc" id="L137">    return entries.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
+<span class="fc" id="L158">    List&lt;JobLog&gt; entries = jobLogRepository.findByJobIdOrderByIdAsc(jobId);</span>
+<span class="fc" id="L159">    return entries.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
   }
 
   /**
@@ -143,10 +165,10 @@ import org.springframework.transaction.support.TransactionTemplate;
    * gets back only new lines.
    */
   public List&lt;JobLog&gt; getJobLogTail(Long jobId, Long afterId) {
-<span class="fc bfc" id="L146" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
-<span class="fc" id="L147">      throw new EntityNotFoundException(Job.class, jobId);</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">    if (!jobsRepository.existsById(jobId)) {</span>
+<span class="fc" id="L169">      throw new EntityNotFoundException(Job.class, jobId);</span>
     }
-<span class="fc" id="L149">    return jobLogRepository.findByJobIdAndIdGreaterThanOrderByIdAsc(jobId, afterId);</span>
+<span class="fc" id="L171">    return jobLogRepository.findByJobIdAndIdGreaterThanOrderByIdAsc(jobId, afterId);</span>
   }
 
   /**
@@ -155,10 +177,10 @@ import org.springframework.transaction.support.TransactionTemplate;
    * the job id is already known-valid (the caller has just fetched a page of {@link Job} rows).
    */
   public String getJobLogPreview(Long jobId) {
-<span class="fc" id="L158">    List&lt;JobLog&gt; tail = jobLogRepository.findTop10ByJobIdOrderByIdDesc(jobId);</span>
-<span class="fc" id="L159">    List&lt;JobLog&gt; chronological = new ArrayList&lt;&gt;(tail);</span>
-<span class="fc" id="L160">    Collections.reverse(chronological);</span>
-<span class="fc" id="L161">    return chronological.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
+<span class="fc" id="L180">    List&lt;JobLog&gt; tail = jobLogRepository.findTop10ByJobIdOrderByIdDesc(jobId);</span>
+<span class="fc" id="L181">    List&lt;JobLog&gt; chronological = new ArrayList&lt;&gt;(tail);</span>
+<span class="fc" id="L182">    Collections.reverse(chronological);</span>
+<span class="fc" id="L183">    return chronological.stream().map(JobLog::getMessage).collect(Collectors.joining(&quot;\n&quot;));</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
