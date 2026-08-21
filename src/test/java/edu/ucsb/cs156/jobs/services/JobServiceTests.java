@@ -1,9 +1,11 @@
 package edu.ucsb.cs156.jobs.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,10 +13,13 @@ import static org.mockito.Mockito.when;
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
+import edu.ucsb.cs156.jobs.errors.JobCancelledException;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -145,6 +150,44 @@ public class JobServiceTests {
     ArgumentCaptor<JobLog> logCaptor = ArgumentCaptor.forClass(JobLog.class);
     verify(jobLogRepository).save(logCaptor.capture());
     assertEquals("java.lang.Exception: Fail!", logCaptor.getValue().getMessage());
+  }
+
+  @Test
+  public void runJobAsync_skips_execution_when_already_cancelled_while_queued() {
+    // the cancel endpoint kills a still-queued job directly (nothing is
+    // executing yet), so by the time the executor picks it up the
+    // *persisted* row already reads "cancelled" -- even though the
+    // in-memory `job` passed in here is stale and still says "queued"
+    Job job = Job.builder().id(1L).status("queued").build();
+    Job current = Job.builder().id(1L).status("cancelled").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(current));
+    AtomicBoolean invoked = new AtomicBoolean(false);
+    JobContextConsumer jobFunction = c -> invoked.set(true);
+
+    jobService.runJobAsync(job, jobFunction);
+
+    assertFalse(invoked.get());
+    verify(contextFactory, never()).createContext(any());
+    verify(jobsRepository, never()).save(any());
+  }
+
+  @Test
+  public void runJobAsync_sets_status_cancelled_when_job_body_throws_JobCancelledException() {
+    Job job = Job.builder().id(1L).status("queued").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(job));
+    JobContext context = new JobContext(jobLogRepository, job, null);
+    when(contextFactory.createContext(job)).thenReturn(context);
+    JobContextConsumer jobFunction =
+        c -> {
+          throw new JobCancelledException(1L);
+        };
+
+    jobService.runJobAsync(job, jobFunction);
+
+    assertEquals("cancelled", job.getStatus());
+    verify(platformTransactionManager).rollback(any());
+    // one save for "running", one for the "cancelled" status update
+    verify(jobsRepository, times(2)).save(job);
   }
 
   @Test

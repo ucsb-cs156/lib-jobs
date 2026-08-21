@@ -519,7 +519,7 @@ a real H2-backed repository, since `Specification` predicate lambdas built in
 a Mockito-mocked-repository test are constructed but never actually invoked
 by a `CriteriaBuilder`.
 
-## 9. Job cancellation (deferred, design only — not yet built)
+## 9. Job cancellation (v0.3.0, shipped 2026-08-21)
 
 Sequenced *after* §8 lands and stabilizes, because the mechanism hooks
 directly into `ctx.log()`'s write path and shouldn't be built against a write
@@ -580,6 +580,31 @@ restart is a discrete, unambiguous event: anything still marked
 running/queued at boot is guaranteed orphaned in the org's current
 single-instance-per-app deployment model). No schema change strictly required
 (reuses `status`, or adds a distinct `interrupted` value for a clearer UI).
+Still out of scope — not part of v0.3.0.
+
+**As built — two things the design above didn't nail down, resolved while
+implementing:**
+
+- **`JobCancelledException` is unchecked** (`extends RuntimeException`), not
+  checked. Several already-migrated job bodies call `ctx.log(...)` from
+  inside lambdas whose functional interface doesn't declare `throws
+  Exception` (e.g. frontiers' `PushTeamsToGithubJob`/`PullTeamsFromGithubJob`,
+  inside `Map.forEach(...)`). A checked exception on `log()` would have
+  broken every one of those call sites; unchecked preserves the "no
+  retroactive changes to existing job bodies" promise exactly.
+- **The cancellation check needs its own REQUIRES_NEW transaction**, same as
+  the log write already gets (§8). First implementation re-fetched the job
+  directly on the ambient (job-body) transaction and silently never detected
+  cancellation in a real run — only caught by the integration test that
+  exercises a real database and a real blocked/resumed job body, not by any
+  mocked-repository unit test. Root cause: the job body executes inside one
+  long-lived transaction/session (`JobService.runJobAsync`); Hibernate's
+  session-scoped first-level cache returns the `Job` entity it already
+  loaded earlier in that same session on every subsequent `findById`,
+  invisible to a concurrent commit from a different connection — exactly
+  the staleness problem `logTransactionTemplate` (REQUIRES_NEW) already
+  exists to avoid for log writes. Fixed by wrapping the cancellation
+  re-fetch in the same `logTransactionTemplate`.
 
 ## Appendix A: Drift survey (as of 2026-07-12, all repos' `main`)
 

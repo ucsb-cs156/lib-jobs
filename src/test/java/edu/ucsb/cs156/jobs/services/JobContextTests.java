@@ -2,14 +2,19 @@ package edu.ucsb.cs156.jobs.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.entities.JobLog;
+import edu.ucsb.cs156.jobs.errors.JobCancelledException;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -106,5 +111,67 @@ public class JobContextTests {
 
     verify(jobLogRepository).save(any(JobLog.class));
     verify(platformTransactionManager).commit(any());
+  }
+
+  @Test
+  public void three_arg_constructor_disables_cancellation_checking() {
+    // the 3-arg constructor never sets jobsRepository, so it must never
+    // consult it, even for a job whose (hypothetically re-fetched) status
+    // would otherwise be "cancelling"
+    Job job = Job.builder().id(7L).status("cancelling").build();
+    JobContext context = new JobContext(jobLogRepository, job, null);
+
+    context.log("no cancellation check possible here");
+
+    verify(jobsRepository, never()).findById(any());
+  }
+
+  @Test
+  public void log_throws_JobCancelledException_when_current_status_is_cancelling() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+    // status flips to "cancelling" on the persisted row between launch and
+    // this checkpoint -- the in-memory `job.status` above is deliberately
+    // stale to prove the check re-fetches rather than trusting it
+    Job current = Job.builder().id(7L).status("cancelling").build();
+    when(jobsRepository.findById(7L)).thenReturn(Optional.of(current));
+
+    assertThrows(JobCancelledException.class, () -> context.log("checkpoint"));
+    // the line at the checkpoint itself must still have been persisted
+    // before the check fires
+    verify(jobLogRepository).save(any(JobLog.class));
+  }
+
+  @Test
+  public void log_does_not_throw_when_current_status_is_not_cancelling() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+    when(jobsRepository.findById(7L)).thenReturn(Optional.of(job));
+
+    context.log("checkpoint");
+
+    verify(jobLogRepository).save(any(JobLog.class));
+  }
+
+  @Test
+  public void log_does_not_throw_when_the_job_row_is_gone() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+    when(jobsRepository.findById(7L)).thenReturn(Optional.empty());
+
+    context.log("checkpoint");
+
+    verify(jobLogRepository).save(any(JobLog.class));
+  }
+
+  @Test
+  public void logNoCancelCheck_skips_the_check_even_when_cancelling() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+
+    context.logNoCancelCheck("must not be interrupted");
+
+    verify(jobLogRepository).save(any(JobLog.class));
+    verify(jobsRepository, never()).findById(any());
   }
 }

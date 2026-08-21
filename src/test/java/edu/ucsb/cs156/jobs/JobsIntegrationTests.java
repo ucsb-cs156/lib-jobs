@@ -158,6 +158,88 @@ public class JobsIntegrationTests {
     assertEquals(unscoped.getId(), jobsRepository.findAll().get(0).getId());
   }
 
+  /**
+   * The running-job cancellation path: a cancel request flips the row to "cancelling" while the job
+   * is mid-run; the job body's next {@code ctx.log()} checkpoint (no code changes needed in the job
+   * body itself) throws, and {@code JobService} lands the job in the terminal "cancelled" status
+   * without ever reaching the log line after the checkpoint.
+   */
+  @Test
+  public void a_running_job_stops_at_its_next_checkpoint_when_cancelled() throws Exception {
+    CountDownLatch canFinish = new CountDownLatch(1);
+
+    JobContextConsumer blockedJob =
+        c -> {
+          c.log("checkpoint 1");
+          canFinish.await();
+          // the checkpoint that detects cancellation still logs its own message
+          // first (design: "log the message first, then check") -- only the
+          // checkpoint AFTER that one must never run
+          c.log("checkpoint 2");
+          c.log("checkpoint 3"); // must never appear
+        };
+
+    Job launched = jobService.runAsJob(blockedJob);
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(() -> "checkpoint 1".equals(jobService.getJobLogs(launched.getId())));
+
+    // simulate POST /api/jobs/{id}/cancel on a running job
+    Job toCancel = jobsRepository.findById(launched.getId()).orElseThrow();
+    toCancel.setStatus("cancelling");
+    jobsRepository.save(toCancel);
+
+    canFinish.countDown();
+
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(
+            () ->
+                "cancelled"
+                    .equals(jobsRepository.findById(launched.getId()).orElseThrow().getStatus()));
+    assertEquals("checkpoint 1\ncheckpoint 2", jobService.getJobLogs(launched.getId()));
+  }
+
+  /**
+   * The queued-job cancellation path: a cancel request on a job that's still waiting behind another
+   * one in the single-threaded executor's FIFO queue kills it directly and instantly (nothing is
+   * executing yet) -- the executor must skip invoking its body entirely once it's finally free to
+   * pick the job up.
+   */
+  @Test
+  public void a_queued_job_never_runs_when_cancelled_before_the_executor_picks_it_up()
+      throws Exception {
+    CountDownLatch canFinish = new CountDownLatch(1);
+    JobContextConsumer blockingJob = c -> canFinish.await();
+
+    Job busy = jobService.runAsJob(blockingJob);
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(
+            () ->
+                "running".equals(jobsRepository.findById(busy.getId()).orElseThrow().getStatus()));
+
+    Job queued = jobService.runAsJob(TestJob.builder().build());
+    assertEquals("queued", jobsRepository.findById(queued.getId()).orElseThrow().getStatus());
+
+    // simulate POST /api/jobs/{id}/cancel on the still-queued job
+    Job toCancel = jobsRepository.findById(queued.getId()).orElseThrow();
+    toCancel.setStatus("cancelled");
+    jobsRepository.save(toCancel);
+
+    canFinish.countDown();
+    assertEquals("complete", awaitFinished(busy.getId()).getStatus());
+
+    // give the now-free executor a moment to pick up (and skip) the cancelled job
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(
+            () ->
+                "cancelled"
+                    .equals(jobsRepository.findById(queued.getId()).orElseThrow().getStatus()));
+    assertEquals("", jobService.getJobLogs(queued.getId()));
+  }
+
   @Test
   public void findAllByOrderByIdDesc_returns_newest_first() {
     Job first = jobService.runAsJob(TestJob.builder().build());

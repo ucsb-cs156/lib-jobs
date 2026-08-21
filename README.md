@@ -105,10 +105,24 @@ public Job launchTestJob() {
 ```
 
 The returned `Job` row updates live: `status` moves `queued` → `running` →
-`complete` (or `error`), and each `c.log(...)` call appends to the persistent
-`log` column and commits in its own transaction (REQUIRES_NEW), so admins can
-watch progress from the jobs UI while the job runs — independent of the job
-body's all-or-nothing transaction.
+`complete` (or `error`, or `cancelled` — see below), and each `c.log(...)`
+call inserts a new `job_logs` row and commits in its own transaction
+(REQUIRES_NEW), so admins can watch progress from the jobs UI while the job
+runs — independent of the job body's all-or-nothing transaction.
+
+### Cancelling a job
+
+`POST /api/jobs/{id}/cancel` requests cancellation. A **queued** job (not yet
+picked up by the executor) is killed immediately — nothing is executing yet,
+so this is fully honest. A **running** job is marked `cancelling`; job bodies
+need no code changes to support this, since every `c.log(...)` call already
+checks for it after persisting its message, and throws to stop the job the
+next time it's called (`status` becomes the terminal `cancelled`). Escape
+hatch for a log point that must not be interrupted:
+`c.logNoCancelCheck(...)` — same log-and-persist behavior, skips the check.
+
+Hard-kill (`Thread.interrupt()`) is deliberately not used — see DESIGN.md §9
+for why.
 
 Jobs may optionally declare a *scope* (an association with one app-domain
 object, e.g. a course) by overriding `getScopeType()`/`getScopeId()`; the

@@ -2,6 +2,7 @@ package edu.ucsb.cs156.jobs.services;
 
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.entities.JobLog;
+import edu.ucsb.cs156.jobs.errors.JobCancelledException;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -24,31 +25,61 @@ import org.springframework.transaction.support.TransactionTemplate;
  * apps' job tests conventionally run jobs against {@code new JobContext(null, job)} and assert on
  * {@code job.getLog()}; that legacy two-arg constructor is preserved unchanged for exactly this
  * reason.
+ *
+ * <p>Since v0.3.0, each {@link #log} call also checks for cancellation (see {@link
+ * JobCancelledException}): a null {@code jobsRepository} disables the check the same way a null
+ * {@code jobLogRepository} disables persistence, so every pre-v0.3.0 call site (including the
+ * deprecated two-arg constructor) keeps compiling and behaving exactly as before.
  */
 @Slf4j
 public class JobContext {
   private final JobLogRepository jobLogRepository;
   private final Job job;
   private final TransactionTemplate logTransactionTemplate;
+  private final JobsRepository jobsRepository;
 
   /**
    * @deprecated kept only so existing test code written against v0.1.x ({@code new JobContext(null,
-   *     job)}) keeps compiling; the {@code jobsRepository} parameter is ignored. Use {@link
-   *     #JobContext(JobLogRepository, Job, TransactionTemplate)}.
+   *     job)}) keeps compiling; the {@code jobsRepository} parameter is ignored (no persistence, no
+   *     cancellation checking). Use {@link #JobContext(JobLogRepository, Job, TransactionTemplate,
+   *     JobsRepository)}.
    */
   @Deprecated
   public JobContext(JobsRepository jobsRepository, Job job) {
-    this((JobLogRepository) null, job, null);
+    this((JobLogRepository) null, job, null, null);
   }
 
   public JobContext(
       JobLogRepository jobLogRepository, Job job, TransactionTemplate logTransactionTemplate) {
+    this(jobLogRepository, job, logTransactionTemplate, null);
+  }
+
+  public JobContext(
+      JobLogRepository jobLogRepository,
+      Job job,
+      TransactionTemplate logTransactionTemplate,
+      JobsRepository jobsRepository) {
     this.jobLogRepository = jobLogRepository;
     this.job = job;
     this.logTransactionTemplate = logTransactionTemplate;
+    this.jobsRepository = jobsRepository;
   }
 
+  /** Appends one log line, then checks whether cancellation has been requested. */
   public void log(String message) {
+    persist(message);
+    checkCancellation();
+  }
+
+  /**
+   * Same as {@link #log}, but skips the cancellation check — an escape hatch for log points that
+   * must not be interrupted.
+   */
+  public void logNoCancelCheck(String message) {
+    persist(message);
+  }
+
+  private void persist(String message) {
     log.info("Job {}: {}", job.getId(), message);
     if (jobLogRepository == null) {
       // Test seam: no persistence available, so accumulate in-memory on the
@@ -63,6 +94,36 @@ public class JobContext {
     } else {
       jobLogRepository.save(entry);
     }
+  }
+
+  /**
+   * Re-fetches the job's current persisted status and throws if it is {@code "cancelling"}. A null
+   * {@code jobsRepository} disables this check entirely.
+   *
+   * <p>The re-fetch must run in its own REQUIRES_NEW transaction, same as {@link #persist}'s log
+   * write and for the same reason: the job body executes inside one long-lived, all-or-nothing
+   * transaction (see {@link JobService#runJobAsync}), and Hibernate's session-scoped first-level
+   * cache would otherwise return the {@code Job} entity it already loaded earlier in that same
+   * transaction/session -- silently hiding a concurrent cancel request committed from a different
+   * connection, exactly the staleness {@code logTransactionTemplate} already exists to avoid for
+   * log writes.
+   */
+  private void checkCancellation() {
+    if (jobsRepository == null) {
+      return;
+    }
+    boolean cancelling =
+        logTransactionTemplate != null
+            ? Boolean.TRUE.equals(logTransactionTemplate.execute(status -> isCancelling()))
+            : isCancelling();
+    if (cancelling) {
+      throw new JobCancelledException(job.getId());
+    }
+  }
+
+  private boolean isCancelling() {
+    Job current = jobsRepository.findById(job.getId()).orElse(null);
+    return current != null && "cancelling".equals(current.getStatus());
   }
 
   /**

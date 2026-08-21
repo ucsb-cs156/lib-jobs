@@ -2,10 +2,12 @@ package edu.ucsb.cs156.jobs.controllers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -286,6 +288,80 @@ public class JobsControllerTests {
         .perform(get("/api/jobs/paginated?page=0&pageSize=10"))
         .andExpect(status().isForbidden());
     mockMvc.perform(get("/api/jobs?id=1")).andExpect(status().isForbidden());
+  }
+
+  @WithMockUser(roles = {"ADMIN"})
+  @Test
+  public void admin_can_cancel_a_queued_job() throws Exception {
+    Job job = Job.builder().id(1L).status("queued").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(job));
+
+    mockMvc
+        .perform(post("/api/jobs/1/cancel"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("cancelled"));
+
+    ArgumentCaptor<Job> savedJob = ArgumentCaptor.forClass(Job.class);
+    verify(jobsRepository).save(savedJob.capture());
+    assertEquals("cancelled", savedJob.getValue().getStatus());
+  }
+
+  @WithMockUser(roles = {"ADMIN"})
+  @Test
+  public void admin_can_cancel_a_running_job() throws Exception {
+    Job job = Job.builder().id(1L).status("running").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(job));
+
+    mockMvc
+        .perform(post("/api/jobs/1/cancel"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("cancelling"));
+
+    ArgumentCaptor<Job> savedJob = ArgumentCaptor.forClass(Job.class);
+    verify(jobsRepository).save(savedJob.capture());
+    assertEquals("cancelling", savedJob.getValue().getStatus());
+  }
+
+  @WithMockUser(roles = {"ADMIN"})
+  @Test
+  public void cancelling_an_already_cancelling_job_is_a_no_op() throws Exception {
+    Job job = Job.builder().id(1L).status("cancelling").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(job));
+
+    mockMvc
+        .perform(post("/api/jobs/1/cancel"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("cancelling"));
+
+    verify(jobsRepository, never()).save(any());
+  }
+
+  @WithMockUser(roles = {"ADMIN"})
+  @Test
+  public void cancelling_a_finished_job_is_a_no_op() throws Exception {
+    Job job = Job.builder().id(1L).status("complete").build();
+    when(jobsRepository.findById(1L)).thenReturn(Optional.of(job));
+
+    mockMvc
+        .perform(post("/api/jobs/1/cancel"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("complete"));
+
+    verify(jobsRepository, never()).save(any());
+  }
+
+  @WithMockUser(roles = {"ADMIN"})
+  @Test
+  public void cancel_returns_404_when_missing() throws Exception {
+    when(jobsRepository.findById(99L)).thenReturn(Optional.empty());
+
+    mockMvc.perform(post("/api/jobs/99/cancel")).andExpect(status().isNotFound());
+  }
+
+  @WithMockUser(roles = {"USER"})
+  @Test
+  public void non_admin_cannot_cancel_a_job() throws Exception {
+    mockMvc.perform(post("/api/jobs/1/cancel")).andExpect(status().isForbidden());
   }
 
   @WithMockUser(roles = {"ADMIN"})

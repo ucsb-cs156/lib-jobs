@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -170,6 +171,33 @@ public class JobsController {
           @RequestParam(defaultValue = "0")
           Long afterId) {
     return jobService.getJobLogTail(id, afterId);
+  }
+
+  @Operation(
+      summary =
+          "Request cancellation of a queued or running job. A queued job is cancelled"
+              + " immediately (nothing is executing yet); a running job is marked \"cancelling\""
+              + " and stops at its next log checkpoint. No-op for a job that has already finished"
+              + " or is already cancelling.")
+  @PreAuthorize("hasRole('ROLE_ADMIN')")
+  @PostMapping("/{id}/cancel")
+  public Job cancelJob(@Parameter(name = "id", description = "Job ID") @PathVariable Long id) {
+    Job job =
+        jobsRepository.findById(id).orElseThrow(() -> new EntityNotFoundException(Job.class, id));
+    switch (job.getStatus()) {
+      case "queued" -> {
+        job.setStatus("cancelled");
+        jobsRepository.save(job);
+      }
+      case "running" -> {
+        job.setStatus("cancelling");
+        jobsRepository.save(job);
+      }
+      default -> {
+        // already cancelling, or already in a terminal status — no-op, idempotent
+      }
+    }
+    return job;
   }
 
   @Operation(summary = "Delete specific job record")

@@ -3,6 +3,7 @@ package edu.ucsb.cs156.jobs.services;
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.entities.JobLog;
 import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
+import edu.ucsb.cs156.jobs.errors.JobCancelledException;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import java.util.ArrayList;
@@ -74,6 +75,19 @@ public class JobService {
   @Async("jobsExecutor")
   public void runJobAsync(Job job, JobContextConsumer jobFunction) {
     /*
+     * A cancel request may have arrived while this job was still queued
+     * behind another one; that's the one case that's fully, instantly
+     * killable (nothing is executing yet), so the cancel endpoint sets
+     * "cancelled" directly rather than "cancelling". Honor that here by
+     * re-fetching (the in-memory `job` is stale relative to that write)
+     * and skipping the job body entirely if so.
+     */
+    Job current = jobsRepository.findById(job.getId()).orElse(job);
+    if ("cancelled".equals(current.getStatus())) {
+      return;
+    }
+
+    /*
      * The job may have waited in the executor queue (it runs one job at a
      * time by default); "running" is only truthful once we get here. This
      * save is outside the wrapping transaction, so it is visible immediately.
@@ -91,10 +105,18 @@ public class JobService {
               /*lambdas cannot throw checked exceptions
               have to repackage as a runtime exception
               to catch outside transactional boundary*/
+            } catch (JobCancelledException e) {
+              // already unchecked; propagate as itself so the outer catch
+              // below can tell a cancellation apart from a real error
+              throw e;
             } catch (Exception e) {
               throw new RuntimeException(e);
             }
           });
+    } catch (JobCancelledException e) {
+      job.setStatus("cancelled");
+      jobsRepository.save(job);
+      return;
     } catch (Exception e) {
       job.setStatus("error");
       jobsRepository.save(job);

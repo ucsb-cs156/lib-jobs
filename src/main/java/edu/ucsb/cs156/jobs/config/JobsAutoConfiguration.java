@@ -2,6 +2,7 @@ package edu.ucsb.cs156.jobs.config;
 
 import edu.ucsb.cs156.jobs.controllers.JobsController;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
+import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import edu.ucsb.cs156.jobs.services.JobContextFactory;
 import edu.ucsb.cs156.jobs.services.JobRateLimit;
 import edu.ucsb.cs156.jobs.services.JobService;
@@ -53,8 +54,10 @@ public class JobsAutoConfiguration {
   @Bean
   @ConditionalOnMissingBean
   public JobContextFactory libJobsContextFactory(
-      JobLogRepository jobLogRepository, PlatformTransactionManager transactionManager) {
-    return new JobContextFactory(jobLogRepository, transactionManager);
+      JobLogRepository jobLogRepository,
+      PlatformTransactionManager transactionManager,
+      JobsRepository jobsRepository) {
+    return new JobContextFactory(jobLogRepository, transactionManager, jobsRepository);
   }
 
   @Bean
