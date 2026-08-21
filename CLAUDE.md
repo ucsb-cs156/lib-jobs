@@ -318,13 +318,45 @@ when decisions change.
       happycows** (frozen until ~2026-09-15, see below) — dining, scaffold,
       courses, citelines, and frontiers are all on v0.2.0.
 
-      **Next up:** with frontiers done, the only lib-jobs-adjacent work not
-      blocked on the happycows freeze is v0.3.0 (job cancellation,
-      DESIGN.md §9, design-only so far) or phase 7 (frontend package). Not
-      yet decided — check with Phill. Once the freeze lifts (~2026-09-15),
-      happycows still needs its own v0.2.0 bump (deliberately last since
-      it's mission-critical), likely paired with whatever v0.3.0 ships by
-      then per the original plan.
+- [x] **v0.3.0 release** (2026-08-21): job cancellation, built per the
+      design agreed with Phill 2026-07-13 (DESIGN.md §9). `POST
+      /api/jobs/{id}/cancel`: a queued job is killed directly (nothing
+      executing yet); a running job is marked `cancelling` and stops at its
+      next `ctx.log()` checkpoint with zero job-body code changes required,
+      landing in a terminal `cancelled` status via a new
+      `JobCancelledException` (deliberately unchecked — several
+      already-migrated job bodies, e.g. frontiers'
+      `PushTeamsToGithubJob`/`PullTeamsFromGithubJob`, call `ctx.log(...)`
+      inside `Map.forEach` lambdas whose functional interface doesn't
+      declare checked exceptions; a checked exception there would have
+      broken those call sites). Escape hatch: `ctx.logNoCancelCheck(...)`.
+
+      **Real bug caught only by the integration test, not by any
+      mocked-repository unit test:** the first implementation re-fetched
+      the job directly on the ambient job-body transaction and silently
+      never detected cancellation in a real run. Root cause: the job body
+      already executes inside one long-lived transaction (v0.1.x design);
+      Hibernate's session-scoped first-level cache returns the `Job`
+      entity it already loaded earlier in that same session on every
+      subsequent `findById`, invisible to a concurrent commit from a
+      different connection — the exact staleness problem
+      `logTransactionTemplate` (REQUIRES_NEW) already exists to avoid for
+      log writes (v0.2.0). Fixed by wrapping the cancellation check in the
+      same REQUIRES_NEW template. **Lesson for any future change that
+      reads fresh state from within a job body: mocked-repository unit
+      tests cannot catch this class of bug — only a real end-to-end test
+      against an actual database with a real blocked/resumed job body
+      will.**
+
+      85 tests (12 new/updated), jacoco 100%, pitest 81/81. Tagged and
+      verified on JitPack (`com.github.ucsb-cs156:lib-jobs:v0.3.0`
+      resolves).
+
+      **Rollout order for adopting v0.3.0, per Phill (2026-08-21):**
+      citelines → scaffold → frontiers → dining → courses (happycows
+      excluded — still frozen until ~2026-09-15). Each app's PR bumps the
+      dependency and adds a "Cancel" action to its admin Jobs UI for
+      queued/running jobs; not yet started.
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.

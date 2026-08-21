@@ -17,11 +17,19 @@ narrative and can drift out of sync with actual repo state.
 
 ## Library release status
 
+- **v0.3.0** (job cancellation — `POST /api/jobs/{id}/cancel`, cooperative
+  cancellation checked on every `ctx.log()` call, `docs/DESIGN.md` §9) is
+  the current released version, tagged 2026-08-21 and verified resolvable
+  on JitPack. **No app has adopted it yet** — every app in the table above
+  is still on v0.2.0 (or v0.1.6 for happycows); the version column will
+  update as each app's bump PR merges.
 - **v0.2.0** (job-log storage redesign — normalized `job_logs` table,
-  `/paginated` filtering, incremental log tailing) is the current released
-  version. Tagged and verified resolvable on JitPack.
-- **v0.3.0** (job cancellation, `docs/DESIGN.md` §9) is design-only, not yet
-  built or released.
+  `/paginated` filtering, incremental log tailing) — superseded by v0.3.0
+  but still what every app currently runs.
+
+**Rollout order for v0.3.0 adoption** (Phill, 2026-08-21): citelines →
+scaffold → frontiers → dining → courses. happycows excluded — frozen until
+~2026-09-15 (see the table above).
 
 ## Keeping this up to date
 
