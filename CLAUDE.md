@@ -256,19 +256,6 @@ when decisions change.
       migrated. Fold it into DESIGN.md §8's rollout list next time that
       doc is updated.)
 
-      **Next up:** decide between starting v0.3.0 (job cancellation,
-      DESIGN.md §9, design-only so far) or another app's v0.2.0 bump.
-      **Happycows is explicitly frozen for any higher-risk lib-jobs work
-      (its v0.2.0 bump included) until mid-September 2026** (Phill,
-      2026-08-19) — it's mission-critical and already migrated to lib-jobs
-      v0.1.6 via PR ucsb-cs156/proj-happycows#270 (merged 2026-08-08), it
-      just isn't getting bumped further for now. All other apps are fair
-      game in the meantime: frontiers remains last regardless (needs the
-      Course→scope migration too), so realistically that leaves v0.3.0
-      itself as the next candidate. Two follow-up passes confirmed for
-      every app once v0.3.0 exists: job interruptability, then factoring
-      frontend jobs components into the `frontend/` npm package, phase 7.
-
       **Known environment gotcha hit during the dining pilot:** committing
       from a `git worktree` (the established isolation pattern for these
       migrations) fails git-code-format-maven-plugin's pre-commit hook with
@@ -279,7 +266,65 @@ when decisions change.
       `validate-code-format` check already passes via `mvn verify` and CI
       re-runs it server-side anyway. Expect to hit this again on the
       scaffold/courses migrations.
-- [ ] Phase 6: proj-frontiers (last — needs the Course→scope migration)
+- [x] Phase 6: proj-frontiers — merged 2026-08-21, PR
+      ucsb-cs156/proj-frontiers#694. The biggest single migration in the
+      rollout: frontiers had never adopted lib-jobs at all (still ran the
+      original homegrown code the library was extracted from), so this PR
+      combined two migrations every other app did separately — first-ever
+      lib-jobs adoption, and generalizing `Job.course` into the library's
+      `scopeType`/`scopeId` columns (DESIGN.md §3.4) — landing directly on
+      v0.2.0. Deleted `services/jobs/*`, `entities/Job`,
+      `repositories/JobsRepository`; added `JobUserProviderImpl`; all 13
+      course-scoped job classes moved `getCourse()` → `getScopeType()`/
+      `getScopeId()` (two of them, `DeleteRepoJob` and the push/pull-teams
+      pair, simplified to report `courseId` directly instead of querying
+      the repository just to report scope). Changesets `015`/`016`/`017`
+      migrate `course_id` into scope columns and stage/complete the
+      `jobs.log` → `job_logs` backfill around the library's own
+      `002-job-logs-table` changeset. Frontend `JobsTable`: "Course Name" →
+      "Course Id", matching scaffold's precedent. Executor: adopted the
+      library's single-thread FIFO default — frontiers previously had *no*
+      executor bean at all (Spring's unbounded default), so this is a real
+      behavior change but a safer one, closing a pre-existing latent race
+      between concurrent GitHub-org-mutating jobs for the same course
+      (confirmed with Phill before implementing). Backend 697 tests /
+      jacoco 100% / pitest 1110/1110; frontend 502 tests / 100% coverage.
+
+      Two things found beyond the original migration survey, worth
+      checking proactively on any future full-adoption migration (not just
+      partial version bumps): (1) `CoursesController.deleteCourse` called
+      `deleteByCourse_Id` directly — not from `JobsController` at all —
+      which would have been a **compile-time** break, not runtime, if
+      missed; fixed by switching to the library's `deleteByScopeTypeAndScopeId`,
+      which already existed (the purge-side twin of the scoped-listing
+      query), no library change needed. (2) `DownloadRequest.job`, a real
+      `@ManyToOne` FK to `Job` from an entity *outside* the jobs package
+      entirely, needed only an import fix — its FK constraint targets the
+      `jobs` table's unaffected `id` column.
+
+      Local full-clean `pitest` (no history-skip) surfaced ~40 survived
+      mutations purely in job `accept()` methods' `ctx.log(...)` calls —
+      pre-existing test-assertion gaps (tests using `.contains()` checks on
+      a subset of log lines, never hit by the `getCourse()`→`getScopeType()`
+      edits themselves) that a full clean run exposes but CI's
+      incremental-history gate may not have caught before. Fixed by adding
+      the missing log-line assertions to existing tests rather than
+      writing new ones. Live-verified on a QA dokku instance: full
+      changeset chain ran clean (187 rows affected), a real historical
+      job's log diffed byte-for-byte identical before/after, and
+      post-deploy job launches/course jobs tab confirmed working.
+
+      **v0.2.0 rollout is now effectively complete for every app except
+      happycows** (frozen until ~2026-09-15, see below) — dining, scaffold,
+      courses, citelines, and frontiers are all on v0.2.0.
+
+      **Next up:** with frontiers done, the only lib-jobs-adjacent work not
+      blocked on the happycows freeze is v0.3.0 (job cancellation,
+      DESIGN.md §9, design-only so far) or phase 7 (frontend package). Not
+      yet decided — check with Phill. Once the freeze lifts (~2026-09-15),
+      happycows still needs its own v0.2.0 bump (deliberately last since
+      it's mission-critical), likely paired with whatever v0.3.0 ships by
+      then per the original plan.
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.
