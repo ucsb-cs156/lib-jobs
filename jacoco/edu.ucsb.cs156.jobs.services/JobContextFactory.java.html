@@ -2,6 +2,7 @@
 
 import edu.ucsb.cs156.jobs.entities.Job;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
+import edu.ucsb.cs156.jobs.repositories.JobsRepository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -16,17 +17,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class JobContextFactory {
   private final JobLogRepository jobLogRepository;
   private final TransactionTemplate logTransactionTemplate;
+  private final JobsRepository jobsRepository;
 
   public JobContextFactory(
-<span class="fc" id="L21">      JobLogRepository jobLogRepository, PlatformTransactionManager transactionManager) {</span>
-<span class="fc" id="L22">    this.jobLogRepository = jobLogRepository;</span>
-<span class="fc" id="L23">    this.logTransactionTemplate = new TransactionTemplate(transactionManager);</span>
-<span class="fc" id="L24">    this.logTransactionTemplate.setPropagationBehavior(</span>
+      JobLogRepository jobLogRepository,
+      PlatformTransactionManager transactionManager,
+<span class="fc" id="L25">      JobsRepository jobsRepository) {</span>
+<span class="fc" id="L26">    this.jobLogRepository = jobLogRepository;</span>
+<span class="fc" id="L27">    this.logTransactionTemplate = new TransactionTemplate(transactionManager);</span>
+<span class="fc" id="L28">    this.logTransactionTemplate.setPropagationBehavior(</span>
         TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-<span class="fc" id="L26">  }</span>
+<span class="fc" id="L30">    this.jobsRepository = jobsRepository;</span>
+<span class="fc" id="L31">  }</span>
 
   public JobContext createContext(Job job) {
-<span class="fc" id="L29">    return new JobContext(jobLogRepository, job, logTransactionTemplate);</span>
+<span class="fc" id="L34">    return new JobContext(jobLogRepository, job, logTransactionTemplate, jobsRepository);</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

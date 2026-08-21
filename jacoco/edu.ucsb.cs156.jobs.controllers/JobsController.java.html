@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -37,10 +38,10 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = &quot;Jobs&quot;)
 @RequestMapping(&quot;/api/jobs&quot;)
 @RestController
-<span class="fc" id="L40">@Slf4j</span>
-<span class="fc" id="L41">public class JobsController {</span>
-<span class="fc" id="L42">  public static final List&lt;String&gt; ALLOWED_SORT_FIELDS =</span>
-<span class="fc" id="L43">      Arrays.asList(</span>
+<span class="fc" id="L41">@Slf4j</span>
+<span class="fc" id="L42">public class JobsController {</span>
+<span class="fc" id="L43">  public static final List&lt;String&gt; ALLOWED_SORT_FIELDS =</span>
+<span class="fc" id="L44">      Arrays.asList(</span>
           &quot;id&quot;,
           &quot;jobName&quot;,
           &quot;status&quot;,
@@ -61,9 +62,9 @@ import org.springframework.web.bind.annotation.RestController;
   @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
   @GetMapping(&quot;/all&quot;)
   public Iterable&lt;Job&gt; allJobs() {
-<span class="fc" id="L64">    Iterable&lt;Job&gt; jobs = jobsRepository.findAllByOrderByIdDesc();</span>
-<span class="fc" id="L65">    jobs.forEach(this::populateLogPreview);</span>
-<span class="fc" id="L66">    return jobs;</span>
+<span class="fc" id="L65">    Iterable&lt;Job&gt; jobs = jobsRepository.findAllByOrderByIdDesc();</span>
+<span class="fc" id="L66">    jobs.forEach(this::populateLogPreview);</span>
+<span class="fc" id="L67">    return jobs;</span>
   }
 
   @Operation(
@@ -96,48 +97,48 @@ import org.springframework.web.bind.annotation.RestController;
       @Parameter(name = &quot;scopeId&quot;, description = &quot;exact match&quot;) @RequestParam(required = false)
           Long scopeId) {
 
-<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (!ALLOWED_SORT_FIELDS.contains(sortField)) {</span>
-<span class="fc" id="L100">      throw new IllegalArgumentException(</span>
-<span class="fc" id="L101">          String.format(</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">    if (!ALLOWED_SORT_FIELDS.contains(sortField)) {</span>
+<span class="fc" id="L101">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L102">          String.format(</span>
               &quot;%s is not a valid sort field. Valid values are %s&quot;, sortField, ALLOWED_SORT_FIELDS));
     }
 
-<span class="fc" id="L105">    List&lt;String&gt; allowedSortDirections = Arrays.asList(&quot;ASC&quot;, &quot;DESC&quot;);</span>
-<span class="fc bfc" id="L106" title="All 2 branches covered.">    if (!allowedSortDirections.contains(sortDirection)) {</span>
-<span class="fc" id="L107">      throw new IllegalArgumentException(</span>
-<span class="fc" id="L108">          String.format(</span>
+<span class="fc" id="L106">    List&lt;String&gt; allowedSortDirections = Arrays.asList(&quot;ASC&quot;, &quot;DESC&quot;);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">    if (!allowedSortDirections.contains(sortDirection)) {</span>
+<span class="fc" id="L108">      throw new IllegalArgumentException(</span>
+<span class="fc" id="L109">          String.format(</span>
               &quot;%s is not a valid sort direction. Valid values are %s&quot;,
               sortDirection, allowedSortDirections));
     }
 
-<span class="fc" id="L113">    Direction sortDirectionObject = Direction.DESC;</span>
-<span class="fc bfc" id="L114" title="All 2 branches covered.">    if (sortDirection.equals(&quot;ASC&quot;)) {</span>
-<span class="fc" id="L115">      sortDirectionObject = Direction.ASC;</span>
+<span class="fc" id="L114">    Direction sortDirectionObject = Direction.DESC;</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">    if (sortDirection.equals(&quot;ASC&quot;)) {</span>
+<span class="fc" id="L116">      sortDirectionObject = Direction.ASC;</span>
     }
 
-<span class="fc" id="L118">    Specification&lt;Job&gt; spec = Specification.where(null);</span>
-<span class="fc bfc" id="L119" title="All 4 branches covered.">    if (status != null &amp;&amp; !status.isEmpty()) {</span>
-<span class="fc" id="L120">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;status&quot;), status));</span>
+<span class="fc" id="L119">    Specification&lt;Job&gt; spec = Specification.where(null);</span>
+<span class="fc bfc" id="L120" title="All 4 branches covered.">    if (status != null &amp;&amp; !status.isEmpty()) {</span>
+<span class="fc" id="L121">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;status&quot;), status));</span>
     }
-<span class="fc bfc" id="L122" title="All 4 branches covered.">    if (jobName != null &amp;&amp; !jobName.isEmpty()) {</span>
-<span class="fc" id="L123">      String pattern = &quot;%&quot; + jobName.toLowerCase() + &quot;%&quot;;</span>
-<span class="fc" id="L124">      spec = spec.and((root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;jobName&quot;)), pattern));</span>
+<span class="fc bfc" id="L123" title="All 4 branches covered.">    if (jobName != null &amp;&amp; !jobName.isEmpty()) {</span>
+<span class="fc" id="L124">      String pattern = &quot;%&quot; + jobName.toLowerCase() + &quot;%&quot;;</span>
+<span class="fc" id="L125">      spec = spec.and((root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;jobName&quot;)), pattern));</span>
     }
-<span class="fc bfc" id="L126" title="All 4 branches covered.">    if (createdByEmail != null &amp;&amp; !createdByEmail.isEmpty()) {</span>
-<span class="fc" id="L127">      String pattern = &quot;%&quot; + createdByEmail.toLowerCase() + &quot;%&quot;;</span>
-<span class="fc" id="L128">      spec = spec.and((root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;createdByEmail&quot;)), pattern));</span>
+<span class="fc bfc" id="L127" title="All 4 branches covered.">    if (createdByEmail != null &amp;&amp; !createdByEmail.isEmpty()) {</span>
+<span class="fc" id="L128">      String pattern = &quot;%&quot; + createdByEmail.toLowerCase() + &quot;%&quot;;</span>
+<span class="fc" id="L129">      spec = spec.and((root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;createdByEmail&quot;)), pattern));</span>
     }
-<span class="fc bfc" id="L130" title="All 4 branches covered.">    if (scopeType != null &amp;&amp; !scopeType.isEmpty()) {</span>
-<span class="fc" id="L131">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;scopeType&quot;), scopeType));</span>
+<span class="fc bfc" id="L131" title="All 4 branches covered.">    if (scopeType != null &amp;&amp; !scopeType.isEmpty()) {</span>
+<span class="fc" id="L132">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;scopeType&quot;), scopeType));</span>
     }
-<span class="fc bfc" id="L133" title="All 2 branches covered.">    if (scopeId != null) {</span>
-<span class="fc" id="L134">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;scopeId&quot;), scopeId));</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">    if (scopeId != null) {</span>
+<span class="fc" id="L135">      spec = spec.and((root, query, cb) -&gt; cb.equal(root.get(&quot;scopeId&quot;), scopeId));</span>
     }
 
-<span class="fc" id="L137">    PageRequest pageRequest = PageRequest.of(page, pageSize, sortDirectionObject, sortField);</span>
-<span class="fc" id="L138">    Page&lt;Job&gt; result = jobsRepository.findAll(spec, pageRequest);</span>
-<span class="fc" id="L139">    result.getContent().forEach(this::populateLogPreview);</span>
-<span class="fc" id="L140">    return result;</span>
+<span class="fc" id="L138">    PageRequest pageRequest = PageRequest.of(page, pageSize, sortDirectionObject, sortField);</span>
+<span class="fc" id="L139">    Page&lt;Job&gt; result = jobsRepository.findAll(spec, pageRequest);</span>
+<span class="fc" id="L140">    result.getContent().forEach(this::populateLogPreview);</span>
+<span class="fc" id="L141">    return result;</span>
   }
 
   @Operation(summary = &quot;Get a specific job by ID if it is in the database&quot;)
@@ -145,17 +146,17 @@ import org.springframework.web.bind.annotation.RestController;
   @GetMapping(&quot;&quot;)
   public Job getJobById(
       @Parameter(name = &quot;id&quot;, description = &quot;ID of the job&quot;) @RequestParam Long id) {
-<span class="fc" id="L148">    Job job =</span>
-<span class="fc" id="L149">        jobsRepository.findById(id).orElseThrow(() -&gt; new EntityNotFoundException(Job.class, id));</span>
-<span class="fc" id="L150">    job.setLog(jobService.getJobLogs(id));</span>
-<span class="fc" id="L151">    return job;</span>
+<span class="fc" id="L149">    Job job =</span>
+<span class="fc" id="L150">        jobsRepository.findById(id).orElseThrow(() -&gt; new EntityNotFoundException(Job.class, id));</span>
+<span class="fc" id="L151">    job.setLog(jobService.getJobLogs(id));</span>
+<span class="fc" id="L152">    return job;</span>
   }
 
   @Operation(summary = &quot;Get long job logs&quot;)
   @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
   @GetMapping(&quot;/logs/{id}&quot;)
   public String getJobLogs(@Parameter(name = &quot;id&quot;, description = &quot;Job ID&quot;) @PathVariable Long id) {
-<span class="fc" id="L158">    return jobService.getJobLogs(id);</span>
+<span class="fc" id="L159">    return jobService.getJobLogs(id);</span>
   }
 
   @Operation(
@@ -169,31 +170,58 @@ import org.springframework.web.bind.annotation.RestController;
       @Parameter(name = &quot;afterId&quot;, description = &quot;only return lines with id greater than this&quot;)
           @RequestParam(defaultValue = &quot;0&quot;)
           Long afterId) {
-<span class="fc" id="L172">    return jobService.getJobLogTail(id, afterId);</span>
+<span class="fc" id="L173">    return jobService.getJobLogTail(id, afterId);</span>
+  }
+
+  @Operation(
+      summary =
+          &quot;Request cancellation of a queued or running job. A queued job is cancelled&quot;
+              + &quot; immediately (nothing is executing yet); a running job is marked \&quot;cancelling\&quot;&quot;
+              + &quot; and stops at its next log checkpoint. No-op for a job that has already finished&quot;
+              + &quot; or is already cancelling.&quot;)
+  @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
+  @PostMapping(&quot;/{id}/cancel&quot;)
+  public Job cancelJob(@Parameter(name = &quot;id&quot;, description = &quot;Job ID&quot;) @PathVariable Long id) {
+<span class="fc" id="L185">    Job job =</span>
+<span class="fc" id="L186">        jobsRepository.findById(id).orElseThrow(() -&gt; new EntityNotFoundException(Job.class, id));</span>
+<span class="fc bfc" id="L187" title="All 3 branches covered.">    switch (job.getStatus()) {</span>
+      case &quot;queued&quot; -&gt; {
+<span class="fc" id="L189">        job.setStatus(&quot;cancelled&quot;);</span>
+<span class="fc" id="L190">        jobsRepository.save(job);</span>
+<span class="fc" id="L191">      }</span>
+      case &quot;running&quot; -&gt; {
+<span class="fc" id="L193">        job.setStatus(&quot;cancelling&quot;);</span>
+<span class="fc" id="L194">        jobsRepository.save(job);</span>
+<span class="fc" id="L195">      }</span>
+      default -&gt; {
+        // already cancelling, or already in a terminal status — no-op, idempotent
+      }
+    }
+<span class="fc" id="L200">    return job;</span>
   }
 
   @Operation(summary = &quot;Delete specific job record&quot;)
   @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
   @DeleteMapping(&quot;&quot;)
   public Map&lt;String, String&gt; deleteJob(@Parameter(name = &quot;id&quot;) @RequestParam Long id) {
-<span class="fc bfc" id="L179" title="All 2 branches covered.">    if (!jobsRepository.existsById(id)) {</span>
-<span class="fc" id="L180">      return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d not found&quot;, id));</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">    if (!jobsRepository.existsById(id)) {</span>
+<span class="fc" id="L208">      return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d not found&quot;, id));</span>
     }
-<span class="fc" id="L182">    jobsRepository.deleteById(id);</span>
-<span class="fc" id="L183">    return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d deleted&quot;, id));</span>
+<span class="fc" id="L210">    jobsRepository.deleteById(id);</span>
+<span class="fc" id="L211">    return Map.of(&quot;message&quot;, String.format(&quot;Job with id %d deleted&quot;, id));</span>
   }
 
   @Operation(summary = &quot;Delete all job records&quot;)
   @PreAuthorize(&quot;hasRole('ROLE_ADMIN')&quot;)
   @DeleteMapping(&quot;/all&quot;)
   public Map&lt;String, String&gt; deleteAllJobs() {
-<span class="fc" id="L190">    jobsRepository.deleteAll();</span>
-<span class="fc" id="L191">    return Map.of(&quot;message&quot;, &quot;All jobs deleted&quot;);</span>
+<span class="fc" id="L218">    jobsRepository.deleteAll();</span>
+<span class="fc" id="L219">    return Map.of(&quot;message&quot;, &quot;All jobs deleted&quot;);</span>
   }
 
   private void populateLogPreview(Job job) {
-<span class="fc" id="L195">    job.setLog(jobService.getJobLogPreview(job.getId()));</span>
-<span class="fc" id="L196">  }</span>
+<span class="fc" id="L223">    job.setLog(jobService.getJobLogPreview(job.getId()));</span>
+<span class="fc" id="L224">  }</span>
 
   /**
    * The apps map these exceptions in an app-level base controller; the library controller cannot
@@ -202,17 +230,17 @@ import org.springframework.web.bind.annotation.RestController;
   @ExceptionHandler({EntityNotFoundException.class})
   @ResponseStatus(HttpStatus.NOT_FOUND)
   public Object handleEntityNotFoundException(Throwable e) {
-<span class="fc" id="L205">    return Map.of(</span>
-<span class="fc" id="L206">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
-<span class="fc" id="L207">        &quot;message&quot;, e.getMessage());</span>
+<span class="fc" id="L233">    return Map.of(</span>
+<span class="fc" id="L234">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
+<span class="fc" id="L235">        &quot;message&quot;, e.getMessage());</span>
   }
 
   @ExceptionHandler({IllegalArgumentException.class})
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   public Object handleIllegalArgument(Throwable e) {
-<span class="fc" id="L213">    return Map.of(</span>
-<span class="fc" id="L214">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
-<span class="fc" id="L215">        &quot;message&quot;, e.getMessage());</span>
+<span class="fc" id="L241">    return Map.of(</span>
+<span class="fc" id="L242">        &quot;type&quot;, e.getClass().getSimpleName(),</span>
+<span class="fc" id="L243">        &quot;message&quot;, e.getMessage());</span>
   }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
