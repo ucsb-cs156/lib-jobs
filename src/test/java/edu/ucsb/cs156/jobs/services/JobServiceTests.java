@@ -191,6 +191,34 @@ public class JobServiceTests {
   }
 
   @Test
+  public void recoverInterruptedJobsOnStartup_marks_orphaned_jobs_interrupted() {
+    Job wasQueued = Job.builder().id(1L).status("queued").build();
+    Job wasRunning = Job.builder().id(2L).status("running").build();
+    Job wasCancelling = Job.builder().id(3L).status("cancelling").build();
+    when(jobsRepository.findByStatusIn(List.of("queued", "running", "cancelling")))
+        .thenReturn(List.of(wasQueued, wasRunning, wasCancelling));
+
+    jobService.recoverInterruptedJobsOnStartup();
+
+    assertEquals("interrupted", wasQueued.getStatus());
+    assertEquals("interrupted", wasRunning.getStatus());
+    assertEquals("interrupted", wasCancelling.getStatus());
+    verify(jobsRepository).save(wasQueued);
+    verify(jobsRepository).save(wasRunning);
+    verify(jobsRepository).save(wasCancelling);
+  }
+
+  @Test
+  public void recoverInterruptedJobsOnStartup_does_nothing_when_no_orphaned_jobs() {
+    when(jobsRepository.findByStatusIn(List.of("queued", "running", "cancelling")))
+        .thenReturn(List.of());
+
+    jobService.recoverInterruptedJobsOnStartup();
+
+    verify(jobsRepository, never()).save(any());
+  }
+
+  @Test
   public void getJobLogs_joins_log_lines_in_order() {
     when(jobsRepository.existsById(7L)).thenReturn(true);
     when(jobLogRepository.findByJobIdOrderByIdAsc(7L))

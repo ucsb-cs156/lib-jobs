@@ -253,4 +253,31 @@ public class JobsIntegrationTests {
     assertEquals(second.getId(), jobs.get(0).getId());
     assertEquals(first.getId(), jobs.get(1).getId());
   }
+
+  /**
+   * Proves the recovery sweep's query and update actually work against a real database, not just a
+   * mocked repository -- seeds rows directly (bypassing the executor entirely, standing in for jobs
+   * left behind by a *previous* run that crashed or was killed) rather than relying on the
+   * ApplicationReadyEvent firing again mid-test, since the Spring context (and its one startup
+   * event) is already up before this test method runs.
+   */
+  @Test
+  public void recoverInterruptedJobsOnStartup_marks_orphaned_jobs_interrupted_for_real() {
+    Job orphanedQueued = jobsRepository.save(Job.builder().status("queued").build());
+    Job orphanedRunning = jobsRepository.save(Job.builder().status("running").build());
+    Job orphanedCancelling = jobsRepository.save(Job.builder().status("cancelling").build());
+    Job stillComplete = jobsRepository.save(Job.builder().status("complete").build());
+
+    jobService.recoverInterruptedJobsOnStartup();
+
+    assertEquals(
+        "interrupted", jobsRepository.findById(orphanedQueued.getId()).orElseThrow().getStatus());
+    assertEquals(
+        "interrupted", jobsRepository.findById(orphanedRunning.getId()).orElseThrow().getStatus());
+    assertEquals(
+        "interrupted",
+        jobsRepository.findById(orphanedCancelling.getId()).orElseThrow().getStatus());
+    assertEquals(
+        "complete", jobsRepository.findById(stillComplete.getId()).orElseThrow().getStatus());
+  }
 }

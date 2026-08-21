@@ -572,15 +572,42 @@ path that's simultaneously changing underneath it.
   boundaries) that a naive implementation would need to defensively guard
   against for no real gain over cooperative checking.
 
-**Also deferred, related:** detecting jobs left `running`/`queued` after a
-server crash (today's known limitation — the in-memory executor queue is lost
-on restart, and those rows stay `running` forever). Cleanly solvable with a
-one-time sweep on `ApplicationReadyEvent` at startup (not a periodic poll —
-restart is a discrete, unambiguous event: anything still marked
-running/queued at boot is guaranteed orphaned in the org's current
-single-instance-per-app deployment model). No schema change strictly required
-(reuses `status`, or adds a distinct `interrupted` value for a clearer UI).
-Still out of scope — not part of v0.3.0.
+**Startup recovery — built in v0.3.1, sooner than planned.** Originally
+scoped as "also deferred, related" future work (detecting jobs left
+`running`/`queued` after a server crash — the in-memory executor queue is
+lost on restart, so those rows stay `running` forever). Pulled forward
+immediately after v0.3.0 shipped, from a real incident during scaffold's
+rollout: an old job — already stuck for unrelated reasons (see below) —
+showed a Cancel button (since it read `running`), an admin clicked it, and
+it sat in `cancelling` forever with no way to tell it apart from a job
+genuinely still in flight. `JobService.recoverInterruptedJobsOnStartup()`,
+a `@EventListener(ApplicationReadyEvent.class)` method on the
+already-auto-configured `JobService` bean (zero wiring needed by consuming
+apps), marks any job still `queued`, `running`, *or* `cancelling` at
+startup as a new terminal `interrupted` status — `cancelling` included,
+since a restart orphans an in-flight cancellation request exactly the same
+way it orphans a plain running job. Not a periodic poll — restart is a
+discrete, unambiguous event: anything non-terminal at boot is guaranteed
+orphaned in the org's current single-instance-per-app deployment model.
+
+**Important scope limit surfaced by that same incident:** the startup
+sweep only fixes *stale status after a restart*. It does nothing for a job
+that's still genuinely alive but permanently stuck in a JVM that never
+restarted — e.g. blocked forever inside an HTTP call with no timeout. That
+job keeps occupying the (single-threaded, by default) executor no matter
+how many times it's cancelled, since cooperative cancellation only fires
+if the code reaches another `ctx.log()` checkpoint, which a truly hung
+thread never will. The real fix for *that* is ensuring every job body's
+blocking calls have timeouts (e.g. scaffold's shared `RestTemplate` bean
+had none — plain `new RestTemplate()` — found and fixed as part of this
+same incident). Restarting the app is the only way to reclaim a wedged
+executor thread today; hard-kill remains deliberately unimplemented (see
+above). **Action item for every remaining app's v0.3.0/v0.3.1 rollout
+(citelines, frontiers, dining, courses): audit that app's own blocking
+calls (`RestTemplate`, `HttpClient`, etc.) for missing timeouts — this bug
+class has nothing to do with lib-jobs specifically, but a hung job is far
+more consequential now that the executor is easy to permanently wedge one
+job at a time.**
 
 **As built — two things the design above didn't nail down, resolved while
 implementing:**

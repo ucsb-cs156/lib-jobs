@@ -12,7 +12,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -126,6 +128,26 @@ public class JobService {
 
     job.setStatus("complete");
     jobsRepository.save(job);
+  }
+
+  /**
+   * Any job still {@code queued}, {@code running}, or {@code cancelling} at startup is guaranteed
+   * orphaned: {@code jobsExecutor}'s in-memory queue does not survive a restart, so nothing is
+   * actually executing (or about to execute, or checking for a cancellation request on) that job
+   * anymore, and it would otherwise stay stuck in that non-terminal status forever (see DESIGN.md
+   * §9's "Also deferred, related" note). Marks each as the terminal {@code interrupted} status so
+   * admins see an honest state instead of a phantom "running" (or "cancelling") job that will never
+   * progress -- and, critically, so a stuck job from a *previous* run can never be mistaken for one
+   * still occupying the (single-threaded, by default) executor after this restart.
+   */
+  @EventListener(ApplicationReadyEvent.class)
+  public void recoverInterruptedJobsOnStartup() {
+    Iterable<Job> orphaned =
+        jobsRepository.findByStatusIn(List.of("queued", "running", "cancelling"));
+    for (Job job : orphaned) {
+      job.setStatus("interrupted");
+      jobsRepository.save(job);
+    }
   }
 
   /** The full log for one job, oldest line first. */

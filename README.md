@@ -122,7 +122,23 @@ hatch for a log point that must not be interrupted:
 `c.logNoCancelCheck(...)` — same log-and-persist behavior, skips the check.
 
 Hard-kill (`Thread.interrupt()`) is deliberately not used — see DESIGN.md §9
-for why.
+for why. Cooperative cancellation only helps a job that reaches another
+`c.log(...)` checkpoint — a job genuinely blocked forever (e.g. an HTTP call
+with no timeout) never will, and will keep occupying the (single-threaded, by
+default) executor no matter how many times it's cancelled. There is no
+in-process fix for that case beyond restarting the app; consuming apps should
+configure timeouts on any blocking calls a job body makes, so a job body can
+never hang indefinitely in the first place.
+
+### Startup recovery
+
+Any job still `queued`, `running`, or `cancelling` when the app starts is
+guaranteed orphaned: `jobsExecutor`'s in-memory queue does not survive a
+restart, so nothing is actually executing (or about to execute, or checking
+for cancellation on) that job anymore. On every startup, each such job is
+automatically marked with the terminal `interrupted` status — no wiring
+required, this runs via a `@EventListener(ApplicationReadyEvent.class)`
+method already registered on the auto-configured `JobService` bean.
 
 Jobs may optionally declare a *scope* (an association with one app-domain
 object, e.g. a course) by overriding `getScopeType()`/`getScopeId()`; the
