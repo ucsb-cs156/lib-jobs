@@ -359,8 +359,9 @@ when decisions change.
       queued/running jobs.
 
       **Order adjusted mid-rollout (2026-08-21, Phill):** citelines was
-      mid-deploy, so scaffold went first instead. Scaffold's PR
-      (ucsb-cs156/proj-scaffold#121) went CI-green on v0.3.0, then dokku QA
+      mid-deploy, so scaffold went first instead. **Scaffold's PR
+      (ucsb-cs156/proj-scaffold#121) merged 2026-08-22 — scaffold is done.**
+      It went CI-green on v0.3.0, then dokku QA
       testing surfaced the real bug described below — the fix landed as
       v0.3.1 (same PR, updated in place) before merge.
 
@@ -450,6 +451,29 @@ when decisions change.
       (`com.github.ucsb-cs156:lib-jobs:v0.3.2` resolves). Scaffold's
       downstream re-verification: 831 tests, jacoco 100%, pitest
       1169/1169.
+
+      **Scaffold merged and fully done (PR #121, 2026-08-22).** Live QA
+      testing on dokku confirmed all of: cancel-while-running (→
+      `cancelling` → `cancelled`), cancel-while-queued (→ `cancelled`
+      immediately), the startup-recovery sweep marking orphaned jobs
+      `interrupted`, and — the specific regression test for the bug that
+      drove v0.3.2 — cancelling `SyncCourseWithPlRepoJob` during a
+      mostly-unchanged (silent) re-sync now reaches `cancelled` promptly
+      instead of continuing to run for the rest of the walk. **Next up:
+      citelines** (back to the front of the queue now that scaffold, moved
+      ahead of it, is done — not yet started).
+
+      Also decided while wrapping up scaffold (Phill, 2026-08-22): keep
+      building the Cancel button as per-app JSX for the remaining rollouts
+      rather than pausing to build a shared frontend component first —
+      publishing an npm package is a heavier, slower-to-iterate commitment
+      than local JSX, and this same feature needed three same-day point
+      releases on the backend driven by things only live QA surfaced,
+      suggesting the frontend side may need similar fast iteration too.
+      Track real cross-app frontend differences as they come up during the
+      remaining rollouts instead, to inform Phase 7 with actual drift data
+      rather than generalizing off of scaffold's shape alone (see Phase 7
+      entry below).
 - [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
       backend rollout finishes (citelines, frontiers, dining, courses).
 
