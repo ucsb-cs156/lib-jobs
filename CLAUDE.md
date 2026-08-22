@@ -459,9 +459,10 @@ when decisions change.
       `interrupted`, and — the specific regression test for the bug that
       drove v0.3.2 — cancelling `SyncCourseWithPlRepoJob` during a
       mostly-unchanged (silent) re-sync now reaches `cancelled` promptly
-      instead of continuing to run for the rest of the walk. **Next up:
-      citelines** (back to the front of the queue now that scaffold, moved
-      ahead of it, is done — not yet started).
+      instead of continuing to run for the rest of the walk. **Order
+      adjusted again (2026-08-22, Phill): courses next, not citelines** —
+      citelines has unrelated cleanup work in progress, so it's deferred
+      again. Not yet started.
 
       Also decided while wrapping up scaffold (Phill, 2026-08-22): keep
       building the Cancel button as per-app JSX for the remaining rollouts

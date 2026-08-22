@@ -44,8 +44,10 @@ narrative and can drift out of sync with actual repo state.
 
 **Rollout order for v0.3.x adoption** (Phill, 2026-08-21): citelines →
 scaffold → frontiers → dining → courses. happycows excluded — frozen until
-~2026-09-15 (see the table above). **Order adjusted same day:** citelines
-was mid-deploy, so scaffold went first instead.
+~2026-09-15 (see the table above). **Order adjusted twice since:** citelines
+was mid-deploy, so scaffold went first (2026-08-21, done); then citelines
+had unrelated cleanup work in progress, so **courses is next** (2026-08-22,
+not yet started).
 
 **Standing action items for every remaining app's v0.3.x rollout PR**
 (citelines, frontiers, dining, courses — Phill, 2026-08-21), both found
