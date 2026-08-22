@@ -9,7 +9,7 @@ narrative and can drift out of sync with actual repo state.
 | Repo | lib-jobs version | Status | Notes |
 |---|---|---|---|
 | `proj-dining` | v0.2.0 | ✅ up to date | Pilot for both phase 2 (backend install) and the v0.2.0 job-log redesign. PR [#132](https://github.com/ucsb-cs156/proj-dining/pull/132) merged. |
-| `proj-scaffold` | v0.2.0 | 🔄 v0.3.1 PR in progress | PR [#118](https://github.com/ucsb-cs156/proj-scaffold/pull/118) merged 2026-08-17 (v0.2.0). v0.3.1 bump + Cancel UI + RestTemplate timeout fix open in PR [#121](https://github.com/ucsb-cs156/proj-scaffold/pull/121), CI re-running against the v0.3.1 commit, pending merge + dokku QA re-test. |
+| `proj-scaffold` | v0.2.0 | 🔄 v0.3.2 PR in progress | PR [#118](https://github.com/ucsb-cs156/proj-scaffold/pull/118) merged 2026-08-17 (v0.2.0). v0.3.2 bump + Cancel UI + RestTemplate timeout fix + checkCancellation() checkpoints in the sync job's silent loops, all open in PR [#121](https://github.com/ucsb-cs156/proj-scaffold/pull/121) (bumped through v0.3.0 → v0.3.1 → v0.3.2 as live QA testing surfaced each issue), CI re-running against the v0.3.2 commit, pending merge + dokku QA re-test. |
 | `proj-courses` | v0.2.0 | ✅ up to date | PR [#321](https://github.com/ucsb-cs156/proj-courses/pull/321) merged 2026-08-19, after Liquibase-infrastructure prep in [#316](https://github.com/ucsb-cs156/proj-courses/pull/316)/[#318](https://github.com/ucsb-cs156/proj-courses/pull/318)/[#319](https://github.com/ucsb-cs156/proj-courses/pull/319)/[#324](https://github.com/ucsb-cs156/proj-courses/pull/324). |
 | `proj-citelines` | v0.2.0 | ✅ up to date | PR [#97](https://github.com/ucsb-cs156/proj-citelines/pull/97) merged 2026-08-19. Added to the rollout 2026-08-16 (not one of the original five forks). |
 | `proj-happycows` | v0.1.6 | 🧊 frozen until mid-Sept 2026 | Migrated off homegrown jobs code to lib-jobs v0.1.6 via PR [#270](https://github.com/ucsb-cs156/proj-happycows/pull/270), merged 2026-08-08. **Not yet bumped to v0.2.0** — mission-critical, so Phill has explicitly frozen any higher-risk lib-jobs work here (including the v0.2.0 bump) until mid-September 2026. All other apps are fair game in the meantime. |
@@ -17,21 +17,28 @@ narrative and can drift out of sync with actual repo state.
 
 ## Library release status
 
+- **v0.3.2** (`JobContext.checkCancellation()` made public — same
+  re-fetch-and-throw behavior as the check already inside `log()`, but
+  callable directly with no log line written) is the current released
+  version, tagged 2026-08-21 and verified resolvable on JitPack. Built the
+  same day as v0.3.1, after live QA testing of v0.3.1's own timeout fix on
+  scaffold surfaced a third issue: a job body with a loop that only logs
+  on specific branches (the common case being silent) never gave
+  cancellation a checkpoint to fire from during that silence — see
+  `CLAUDE.md`'s v0.3.2 entry for the full incident. **No app has fully
+  adopted it yet** — every app in the table above is still on v0.2.0 (or
+  v0.1.6 for happycows); the version column will update as each app's
+  bump PR merges. Scaffold's PR (#121) is the first, in progress: bumped
+  through v0.3.0 → v0.3.1 → v0.3.2 as each issue surfaced during the same
+  round of live QA testing.
 - **v0.3.1** (startup recovery sweep — `@EventListener(ApplicationReadyEvent.class)`
   on `JobService` marks any job still `queued`/`running`/`cancelling` at
   boot as a new terminal status, `interrupted`; zero app wiring required)
-  is the current released version, tagged 2026-08-21 and verified
-  resolvable on JitPack. Built the same day as v0.3.0, after live dokku QA
-  testing of scaffold's v0.3.0 PR surfaced a real bug — see `CLAUDE.md`'s
-  v0.3.1 entry for the full incident. **No app has fully adopted it yet**
-  — every app in the table above is still on v0.2.0 (or v0.1.6 for
-  happycows); the version column will update as each app's bump PR merges.
-  Scaffold's PR (#121) is the first, in progress: bumped to v0.3.0 then
-  updated in place to v0.3.1 once the startup-recovery fix landed.
+  — superseded by v0.3.2 the same day.
 - **v0.3.0** (job cancellation — `POST /api/jobs/{id}/cancel`, cooperative
   cancellation checked on every `ctx.log()` call, `docs/DESIGN.md` §9) —
-  superseded by v0.3.1 the same day; no app should adopt v0.3.0 alone,
-  go straight to v0.3.1.
+  superseded by v0.3.2; no app should adopt v0.3.0 or v0.3.1 alone, go
+  straight to v0.3.2.
 - **v0.2.0** (job-log storage redesign — normalized `job_logs` table,
   `/paginated` filtering, incremental log tailing) — superseded by v0.3.x
   but still what every app currently runs.
@@ -41,15 +48,23 @@ scaffold → frontiers → dining → courses. happycows excluded — frozen unt
 ~2026-09-15 (see the table above). **Order adjusted same day:** citelines
 was mid-deploy, so scaffold went first instead.
 
-**Standing action item for every remaining app's v0.3.x rollout PR**
-(citelines, frontiers, dining, courses — Phill, 2026-08-21): audit that
-app's own blocking HTTP calls (RestTemplate, HttpClient, etc.) for missing
-timeouts, even though the bug this addresses has nothing to do with
-lib-jobs itself. Newly consequential because jobs run on a
-single-threaded executor by default — an untimed call can wedge the
-entire queue forever, and only a genuine restart (not cancellation)
-recovers it. Scaffold hit this for real on QA and fixed it in #121
-alongside its v0.3.1 bump.
+**Standing action items for every remaining app's v0.3.x rollout PR**
+(citelines, frontiers, dining, courses — Phill, 2026-08-21), both found
+during scaffold's live QA testing and unrelated to lib-jobs itself, but
+newly consequential now that jobs run on a single-threaded executor by
+default:
+1. Audit that app's own blocking HTTP calls (RestTemplate, HttpClient,
+   etc.) for missing timeouts — an untimed call can wedge the entire
+   queue forever, and only a genuine restart (not cancellation) recovers
+   it.
+2. Check that app's own job bodies for a loop that only calls
+   `ctx.log(...)` on specific branches (e.g. a "skip"/"error" case, with
+   the common case being silent) — such a loop never gives cancellation a
+   checkpoint to fire from during its silent stretches. Add
+   `ctx.checkCancellation()` (v0.3.2+) once per iteration where found.
+
+Scaffold hit both for real on QA and fixed them in #121 alongside its
+v0.3.0→v0.3.2 bump.
 
 ## Keeping this up to date
 

@@ -404,6 +404,52 @@ when decisions change.
       downstream re-verification against the real v0.3.1 jar (fresh `.m2`
       resolution, full `mvn test`) also passed clean: 831 tests, jacoco
       100%, pitest 1167/1167.
+
+- [x] **v0.3.2 release** (2026-08-21): `JobContext.checkCancellation()`
+      made public, same day as v0.3.1, found while live-testing v0.3.1's
+      own RestTemplate fix on scaffold. With the timeout fix in place,
+      cancelling a real slow job (`SyncCourseWithPlRepoJob`, which walks a
+      course's GitHub question/assessment tree) still appeared to hang —
+      the job wasn't stuck, it was legitimately still executing with no
+      visible progress, because its walk only calls `ctx.log(...)` on
+      specific branches (skipped/unparseable entries). The common case on
+      a re-sync — an unchanged question or assessment, which is most of
+      them — produces zero log output, and therefore never reached a
+      cancellation checkpoint either, since that check previously only
+      lived inside `log()`. A cancel request could sit unactioned for the
+      whole rest of a large, silent walk even though nothing was hung and
+      no timeout would ever trip.
+
+      Fix: `checkCancellation()` (already existed privately, called only
+      from `log()`) is now public — same re-fetch-in-a-REQUIRES_NEW-
+      transaction-and-throw behavior, but callable directly by a job body
+      with **no log line written**, so a tight loop can check every
+      iteration without flooding the log. Applied in scaffold's
+      `SyncCourseWithPlRepoJob` at the top of both its per-directory
+      recursive walk and its per-assessment loop (ucsb-cs156/proj-scaffold#121,
+      same PR as the v0.3.1 timeout fix). **Generalizes: check for this same
+      pattern (a loop that logs only on specific branches) in every
+      remaining app's own job bodies during its v0.3.x rollout, alongside
+      the timeout audit above.**
+
+      Getting scaffold's PR green with this required two new tests
+      specifically targeting the new checkpoints — pitest initially
+      reported 2 survived mutations ("removed call to checkCancellation")
+      because no existing test made that call's presence observable.
+      Fixed by mocking `JobsRepository.findById` to return "running" for
+      exactly the N calls known to precede each checkpoint under a given
+      test's setup, then "cancelling" from then on, and asserting both
+      `JobCancelledException` is thrown *and* the next GitHub call the
+      checkpoint should have pre-empted was never made (`verify(never())`)
+      — the second assertion is what actually distinguishes the real code
+      from the mutant, since removing the checkpoint just shifts the
+      exception to a later checkpoint with the same observable exception
+      type otherwise.
+
+      61 tests, jacoco 100%, pitest 84/84. Tagged and verified on JitPack
+      (`com.github.ucsb-cs156:lib-jobs:v0.3.2` resolves). Scaffold's
+      downstream re-verification: 831 tests, jacoco 100%, pitest
+      1169/1169.
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.
