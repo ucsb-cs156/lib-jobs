@@ -29,7 +29,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Since v0.3.0, each {@link #log} call also checks for cancellation (see {@link
  * JobCancelledException}): a null {@code jobsRepository} disables the check the same way a null
  * {@code jobLogRepository} disables persistence, so every pre-v0.3.0 call site (including the
- * deprecated two-arg constructor) keeps compiling and behaving exactly as before.
+ * deprecated two-arg constructor) keeps compiling and behaving exactly as before. Since v0.3.2,
+ * {@link #checkCancellation()} is public, so a job body can also check between log lines -- see its
+ * javadoc.
  */
 @Slf4j
 public class JobContext {
@@ -97,8 +99,18 @@ public class JobContext {
   }
 
   /**
-   * Re-fetches the job's current persisted status and throws if it is {@code "cancelling"}. A null
-   * {@code jobsRepository} disables this check entirely.
+   * Re-fetches the job's current persisted status and throws {@link JobCancelledException} if it is
+   * {@code "cancelling"} -- with no log line written. A null {@code jobsRepository} disables this
+   * check entirely.
+   *
+   * <p>{@link #log} already calls this after every line, so most job bodies never need to call it
+   * directly. It's exposed publicly (since v0.3.2) for job bodies with long stretches of work
+   * between log lines -- e.g. a loop that only logs on certain branches (a "skip" or "error" case),
+   * silently processing many items in between. Calling {@code ctx.checkCancellation()} once per
+   * iteration of such a loop makes cancellation responsive there too, without spamming the log with
+   * a line per item. This was motivated by a real job (a course-sync job walking a directory tree
+   * where only a minority of entries produce a log line) where a cancel request could sit
+   * unactioned for minutes at a time, mid-walk, without this.
    *
    * <p>The re-fetch must run in its own REQUIRES_NEW transaction, same as {@link #persist}'s log
    * write and for the same reason: the job body executes inside one long-lived, all-or-nothing
@@ -108,7 +120,7 @@ public class JobContext {
    * connection, exactly the staleness {@code logTransactionTemplate} already exists to avoid for
    * log writes.
    */
-  private void checkCancellation() {
+  public void checkCancellation() {
     if (jobsRepository == null) {
       return;
     }

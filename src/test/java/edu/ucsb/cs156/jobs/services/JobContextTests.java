@@ -174,4 +174,37 @@ public class JobContextTests {
     verify(jobLogRepository).save(any(JobLog.class));
     verify(jobsRepository, never()).findById(any());
   }
+
+  @Test
+  public void checkCancellation_throws_when_current_status_is_cancelling_and_writes_no_log_line() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+    Job current = Job.builder().id(7L).status("cancelling").build();
+    when(jobsRepository.findById(7L)).thenReturn(Optional.of(current));
+
+    assertThrows(JobCancelledException.class, context::checkCancellation);
+
+    verify(jobLogRepository, never()).save(any(JobLog.class));
+  }
+
+  @Test
+  public void checkCancellation_does_not_throw_when_current_status_is_not_cancelling() {
+    Job job = Job.builder().id(7L).status("running").build();
+    JobContext context = new JobContext(jobLogRepository, job, null, jobsRepository);
+    when(jobsRepository.findById(7L)).thenReturn(Optional.of(job));
+
+    context.checkCancellation();
+
+    verify(jobLogRepository, never()).save(any(JobLog.class));
+  }
+
+  @Test
+  public void checkCancellation_is_a_no_op_when_jobsRepository_is_null() {
+    Job job = Job.builder().id(7L).status("cancelling").build();
+    JobContext context = new JobContext(jobLogRepository, job, null);
+
+    context.checkCancellation();
+
+    verify(jobsRepository, never()).findById(any());
+  }
 }

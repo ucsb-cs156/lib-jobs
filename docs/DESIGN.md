@@ -519,7 +519,7 @@ a real H2-backed repository, since `Specification` predicate lambdas built in
 a Mockito-mocked-repository test are constructed but never actually invoked
 by a `CriteriaBuilder`.
 
-## 9. Job cancellation (v0.3.0, shipped 2026-08-21)
+## 9. Job cancellation (v0.3.0/v0.3.1/v0.3.2, shipped 2026-08-21)
 
 Sequenced *after* §8 lands and stabilizes, because the mechanism hooks
 directly into `ctx.log()`'s write path and shouldn't be built against a write
@@ -608,6 +608,38 @@ calls (`RestTemplate`, `HttpClient`, etc.) for missing timeouts — this bug
 class has nothing to do with lib-jobs specifically, but a hung job is far
 more consequential now that the executor is easy to permanently wedge one
 job at a time.**
+
+**`checkCancellation()` made public — built in v0.3.2, same day as v0.3.1,
+from live QA testing of the v0.3.1 timeout fix itself.** Once scaffold's
+`RestTemplate` timeout was in place, testing cancellation against a real,
+slow job (`SyncCourseWithPlRepoJob`, which recursively walks a course's
+GitHub question tree) surfaced a *third*, distinct failure mode: clicking
+Cancel appeared to hang, but the job wasn't actually stuck — it was
+legitimately still executing, just with no visible progress, because its
+walk only calls `ctx.log(...)` on specific branches (skipped/unparseable
+entries). The common case — an unchanged question or assessment, which is
+most of them on a re-sync — produces zero log output and therefore never
+reaches a cancellation checkpoint either, since the check previously only
+lived inside `log()`. A cancel request could sit unactioned for the entire
+remainder of a large, silent walk even though nothing was hung and no
+timeout would ever trip.
+
+Fix: `JobContext.checkCancellation()` (previously private, called only
+from inside `log()`) is now a public method — same re-fetch-in-a-
+REQUIRES_NEW-transaction-and-throw behavior, but callable directly by a
+job body with **no log line written**, so a tight loop can check every
+iteration without flooding the log with one line per item. Applied in
+scaffold's `SyncCourseWithPlRepoJob` at the top of both its per-directory
+recursive walk and its per-assessment loop — the two silent, network-bound
+loops in that job — landing as part of the same PR that added the
+`RestTemplate` timeouts (ucsb-cs156/proj-scaffold#121).
+
+This generalizes beyond scaffold: any job body with a loop that logs only
+conditionally (a "skip"/"error"/"unchanged" branch, with the common case
+producing no log line) should call `ctx.checkCancellation()` once per
+iteration for the same reason — worth checking for on each remaining
+app's own job bodies during its v0.3.x rollout, alongside the timeout
+audit above.
 
 **As built — two things the design above didn't nail down, resolved while
 implementing:**

@@ -130,6 +130,14 @@ in-process fix for that case beyond restarting the app; consuming apps should
 configure timeouts on any blocking calls a job body makes, so a job body can
 never hang indefinitely in the first place.
 
+A job body with a loop that only logs conditionally (e.g. only on a "skip" or
+"error" branch — many iterations produce no log line at all) can still leave
+cancellation feeling unresponsive: nothing checks for it during the silent
+majority of iterations, even though nothing is actually hung. For that case,
+call `c.checkCancellation()` (since v0.3.2) once per iteration — same
+re-fetch-and-throw behavior as the check inside `log()`, but with no log line
+written, so a tight loop can check every iteration without flooding the log.
+
 ### Startup recovery
 
 Any job still `queued`, `running`, or `cancelling` when the app starts is
