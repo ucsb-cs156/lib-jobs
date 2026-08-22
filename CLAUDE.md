@@ -356,7 +356,54 @@ when decisions change.
       citelines → scaffold → frontiers → dining → courses (happycows
       excluded — still frozen until ~2026-09-15). Each app's PR bumps the
       dependency and adds a "Cancel" action to its admin Jobs UI for
-      queued/running jobs; not yet started.
+      queued/running jobs.
+
+      **Order adjusted mid-rollout (2026-08-21, Phill):** citelines was
+      mid-deploy, so scaffold went first instead. Scaffold's PR
+      (ucsb-cs156/proj-scaffold#121) went CI-green on v0.3.0, then dokku QA
+      testing surfaced the real bug described below — the fix landed as
+      v0.3.1 (same PR, updated in place) before merge.
+
+- [x] **v0.3.1 release** (2026-08-21): startup recovery sweep, built the
+      same day v0.3.0 shipped after live dokku QA testing of scaffold's
+      v0.3.0 PR surfaced a real bug: a job left `running` from a past crash
+      still showed a **Cancel** button; clicking it moved it to
+      `cancelling`, and since nothing was actually executing anymore, it
+      never honored the request — it just sat there forever, permanently
+      occupying the single-threaded executor's notion of "there's an active
+      job" and blocking every job queued behind it.
+
+      Root cause distinguished into two separate failure modes (Phill's own
+      diagnosis, confirmed): (A) a job's DB row is stale after an app
+      restart — nothing is actually running, the in-memory executor queue
+      didn't survive the restart — vs. (B) a job's thread is genuinely still
+      alive but permanently blocked (e.g. an HTTP call with no timeout).
+      Only (A) is fixable in the library; (B) requires the consuming app to
+      configure timeouts on its own blocking calls.
+
+      Fix for (A): `JobService.recoverInterruptedJobsOnStartup()`, an
+      `@EventListener(ApplicationReadyEvent.class)` method on the
+      already-auto-configured `JobService` bean — fires automatically on
+      every consuming app's startup with **zero required wiring**. Marks
+      every job still `queued`, `running`, or `cancelling` (a restart
+      orphans an in-flight cancellation request the same way it orphans a
+      running job) as a new terminal status, `interrupted`.
+
+      (B) is out of scope for the library by design — flagged instead as a
+      standing action item for every app's own v0.3.x rollout PR, since it
+      has nothing to do with lib-jobs specifically but is newly
+      consequential now that jobs run on a single-threaded executor:
+      **audit that app's own blocking calls (RestTemplate, HttpClient,
+      etc.) for missing timeouts, not just as part of scaffold's PR.**
+      Scaffold's own instance of this — `RestTemplate` with no timeout at
+      all — is fixed in ucsb-cs156/proj-scaffold#121 itself (10s connect /
+      60s read), alongside the library bump.
+
+      61 tests, jacoco 100%, pitest 100%. Tagged and verified on JitPack
+      (`com.github.ucsb-cs156:lib-jobs:v0.3.1` resolves). Scaffold's
+      downstream re-verification against the real v0.3.1 jar (fresh `.m2`
+      resolution, full `mvn test`) also passed clean: 831 tests, jacoco
+      100%, pitest 1167/1167.
 - [ ] Phase 7: frontend package in `frontend/`
 
 Update the checklist above as phases complete.
