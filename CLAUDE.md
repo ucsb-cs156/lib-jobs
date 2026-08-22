@@ -450,7 +450,30 @@ when decisions change.
       (`com.github.ucsb-cs156:lib-jobs:v0.3.2` resolves). Scaffold's
       downstream re-verification: 831 tests, jacoco 100%, pitest
       1169/1169.
-- [ ] Phase 7: frontend package in `frontend/`
+- [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
+      backend rollout finishes (citelines, frontiers, dining, courses).
+
+      **Idea for a starting point (Phill, 2026-08-22):** scaffold has a
+      frontend for individual, project-scoped job queues (`JobTabComponent`)
+      but no admin-facing view of jobs *globally* across projects — a real
+      gap, and a natural first component to build for the shared package.
+      Worth checking whether the other apps have (or lack) the same gap
+      before designing it, same as the backend drift survey did in phase 0.
+
+      **Open question, not yet decided:** whether to build the Cancel
+      button as a shared component *before* finishing the v0.3.x rollout to
+      the remaining apps (citelines, frontiers, dining, courses), so each
+      app's rollout PR could consume it instead of reimplementing similar
+      JSX locally each time — versus continuing the current per-app JSX
+      pattern and tracking frontend differences across apps as they're
+      encountered, to give Phase 7 the same grounded drift-survey basis the
+      backend library had (phase 0), rather than generalizing prematurely
+      off of only scaffold's shape. Leaning toward the latter: publishing
+      an npm package is a heavier, slower-to-iterate commitment than local
+      JSX, and today's backend work needed three same-day point releases
+      driven by things only live QA testing surfaced — a similar
+      fast-iteration need seems likely on the frontend side too, better
+      absorbed locally per-app first.
 
 Update the checklist above as phases complete.
 
