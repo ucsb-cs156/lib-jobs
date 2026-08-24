@@ -462,7 +462,37 @@ when decisions change.
       instead of continuing to run for the rest of the walk. **Order
       adjusted again (2026-08-22, Phill): courses next, not citelines** —
       citelines has unrelated cleanup work in progress, so it's deferred
-      again. Not yet started.
+      again.
+
+      **Courses: DONE (PR ucsb-cs156/proj-courses#331, merged
+      2026-08-24).** Bumped straight to v0.3.2. Backend 424 tests, jacoco
+      100%, pitest 575/575; frontend 665 tests, Stryker mutation score
+      100% (courses' CI includes a frontend mutation-testing gate scaffold
+      doesn't have — caught and fixed one survived mutation, a header-text
+      assertion that was inadvertently also satisfied by the Cancel
+      button's own label). Proactively applied both standing audit items
+      before hitting them as live bugs: fixed missing RestTemplate
+      timeouts on four separate construction sites (worse than scaffold's
+      one), and added `checkCancellation()` checkpoints to
+      `UpdateCourseDataJob`'s two silent loops and
+      `GradeHistoryImportServiceImpl`'s CSV row loop. Also found and fixed
+      a real bug along the way: `GradeHistoryImportServiceImpl` was
+      catching `JobCancelledException` in a generic exception handler and
+      re-wrapping it, which would have landed every cancelled grade-import
+      job in `error` instead of `cancelled`.
+
+      **Unrelated but blocking issue hit along the way, also fixed:** a
+      courses-qa deploy attempt failed with a Liquibase
+      `ValidationFailedException` — a checksum mismatch on
+      `010-stage-jobs-log-backfill.json`, caused by a just-merged,
+      unrelated PR (#330, a production-only fix for job logs over 1MB)
+      editing that changeset's column type in place. Safe for production
+      (whose original attempt had failed and rolled back before recording
+      anything) but not for courses-qa, which had already successfully
+      run the original version. Fixed with the same `validCheckSums`
+      mechanism courses had already established as precedent (PR #324) —
+      merged separately as ucsb-cs156/proj-courses#333, with #331 rebased
+      on top of it before #331's own merge/redeploy.
 
       Also decided while wrapping up scaffold (Phill, 2026-08-22): keep
       building the Cancel button as per-app JSX for the remaining rollouts
