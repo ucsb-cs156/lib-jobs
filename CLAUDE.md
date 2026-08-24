@@ -506,31 +506,36 @@ when decisions change.
       rather than generalizing off of scaffold's shape alone (see Phase 7
       entry below).
 
-      **Dining: PR ucsb-cs156/proj-dining#147 open (2026-08-24).** Picked
-      up next since citelines still has unrelated cleanup in progress.
-      Bumped straight to v0.3.2 (dining was on v0.2.0, the v0.2.0-pilot
-      version, and skipped v0.1.x's Course/scope migration entirely since
-      it never had course-scoped jobs). Smallest diff of the rollout so
-      far — no app-code changes were needed for cancellation itself:
-      dining's only job, `TestJob`, is a trivial log/sleep/log with no
-      loop, so it needs no `checkCancellation()` checkpoint of its own;
-      and dining still has no frontend Jobs UI at all (confirmed unchanged
-      since the phase-2/v0.2.0 pilots — jobs are launched and inspected
-      via curl/Swagger), so there's no Cancel button to add. Proactively
-      applied the standing RestTemplate-timeout audit anyway: added
-      connect/read timeouts (10s/60s) to all three construction sites
-      (`DiningCommonsService`, `UCSBDiningMenuItemsService`,
+      **Dining: DONE (PR ucsb-cs156/proj-dining#147, merged 2026-08-24).**
+      Picked up next since citelines still had unrelated cleanup in
+      progress. Bumped straight to v0.3.2 (dining was on v0.2.0, the
+      v0.2.0-pilot version, and skipped v0.1.x's Course/scope migration
+      entirely since it never had course-scoped jobs). Smallest diff of
+      the rollout so far — no app-code changes were needed for
+      cancellation itself: dining's only job, `TestJob`, is a trivial
+      log/sleep/log with no loop, so it needs no `checkCancellation()`
+      checkpoint of its own; and dining still has no frontend Jobs UI at
+      all (confirmed unchanged since the phase-2/v0.2.0 pilots — jobs are
+      launched and inspected via curl/Swagger), so there's no Cancel
+      button to add. Proactively applied the standing RestTemplate-timeout
+      audit anyway: added connect/read timeouts (10s/60s) to all three
+      construction sites (`DiningCommonsService`, `UCSBDiningMenuItemsService`,
       `UCSBDiningMenuService`), even though no job body calls any of them
       today — closes the gap before a future job does, matching the fix
       scaffold and courses each needed live. Checked for the
       `AsyncJobTestsIT`-style mocked-`JobsRepository` bug — clean, no such
       pattern in dining's tests. Backend 186 tests, jacoco 100%, pitest
-      218/218. Live dokku smoke test (cancel-while-running,
-      cancel-while-queued, startup-recovery sweep) still pending before
-      merge, same as every other app in this rollout.
+      218/218. **One wrinkle during live verification:** Phill initially
+      couldn't find `POST /api/jobs/{id}/cancel` in Swagger UI; traced to
+      the QA instance simply not having redeployed the merged branch yet
+      — not a scanning/config issue, since `/cancel` lives in the same
+      `JobsController` class, with the same annotation pattern, as the
+      other jobs endpoints that were already visible. Endpoint appeared
+      once the redeploy caught up. Verified working via Swagger before
+      merge.
 
-      **Remaining after dining: citelines, frontiers** — order between
-      these two not yet decided.
+      **Remaining: citelines, frontiers** — order between these two not
+      yet decided.
 - [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
       backend rollout finishes (citelines, frontiers, dining, courses).
 

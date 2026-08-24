@@ -8,7 +8,7 @@ narrative and can drift out of sync with actual repo state.
 
 | Repo | lib-jobs version | Status | Notes |
 |---|---|---|---|
-| `proj-dining` | v0.2.0 | 🔄 PR open | Pilot for both phase 2 (backend install) and the v0.2.0 job-log redesign. PR [#132](https://github.com/ucsb-cs156/proj-dining/pull/132) merged. v0.3.2 bump PR [#147](https://github.com/ucsb-cs156/proj-dining/pull/147) open 2026-08-24: no app-code changes needed for cancellation itself (TestJob has no silent loop; dining has no frontend Jobs UI, tested via curl/Swagger). Proactively added RestTemplate timeouts to all 3 construction sites per the standing audit item, even though no job calls them today. 186 tests, jacoco 100%, pitest 218/218. |
+| `proj-dining` | v0.3.2 | ✅ up to date | Pilot for both phase 2 (backend install) and the v0.2.0 job-log redesign. PR [#132](https://github.com/ucsb-cs156/proj-dining/pull/132) merged. v0.3.2 bump PR [#147](https://github.com/ucsb-cs156/proj-dining/pull/147) merged 2026-08-24: no app-code changes needed for cancellation itself (TestJob has no silent loop; dining has no frontend Jobs UI, tested via curl/Swagger). Proactively added RestTemplate timeouts to all 3 construction sites per the standing audit item, even though no job calls them today. 186 tests, jacoco 100%, pitest 218/218. Live-verified working (Phill, via Swagger) before merge; third app on v0.3.x. |
 | `proj-scaffold` | v0.3.2 | ✅ up to date | PR [#118](https://github.com/ucsb-cs156/proj-scaffold/pull/118) merged 2026-08-17 (v0.2.0). PR [#121](https://github.com/ucsb-cs156/proj-scaffold/pull/121) merged 2026-08-22 (v0.3.2): Cancel UI, RestTemplate timeout fix, and checkCancellation() checkpoints in the sync job's silent loops — bumped through v0.3.0 → v0.3.1 → v0.3.2 in place as live QA testing surfaced each issue. Live-verified on dokku QA: cancel-while-running, cancel-while-queued, the startup-recovery sweep, and cancel-during-a-silent-unchanged-heavy-resync all confirmed working. First app on v0.3.x. |
 | `proj-courses` | v0.3.2 | ✅ up to date | PR [#321](https://github.com/ucsb-cs156/proj-courses/pull/321) merged 2026-08-19 (v0.2.0), after Liquibase-infrastructure prep in [#316](https://github.com/ucsb-cs156/proj-courses/pull/316)/[#318](https://github.com/ucsb-cs156/proj-courses/pull/318)/[#319](https://github.com/ucsb-cs156/proj-courses/pull/319)/[#324](https://github.com/ucsb-cs156/proj-courses/pull/324). PR [#331](https://github.com/ucsb-cs156/proj-courses/pull/331) merged 2026-08-24 (v0.3.2, straight from v0.2.0): Cancel UI, RestTemplate timeouts on 4 construction sites, checkCancellation() checkpoints in UpdateCourseDataJob/GradeHistoryImportServiceImpl, and a real JobCancelledException-wrapping bug fix. Deploy blocked by an unrelated pre-existing Liquibase checksum mismatch (introduced by PR #330, hit live on courses-qa); fixed and merged separately as [#333](https://github.com/ucsb-cs156/proj-courses/pull/333) using the validCheckSums precedent from #324. Second app on v0.3.x. |
 | `proj-citelines` | v0.2.0 | ✅ up to date | PR [#97](https://github.com/ucsb-cs156/proj-citelines/pull/97) merged 2026-08-19. Added to the rollout 2026-08-16 (not one of the original five forks). |
@@ -25,11 +25,11 @@ narrative and can drift out of sync with actual repo state.
   scaffold surfaced a third issue: a job body with a loop that only logs
   on specific branches (the common case being silent) never gave
   cancellation a checkpoint to fire from during that silence — see
-  `CLAUDE.md`'s v0.3.2 entry for the full incident. **Scaffold and courses
-  are fully adopted** (PR #121 and PR #331 respectively, both merged and
-  verified); **dining's bump PR #147 is open** (2026-08-24); citelines and
-  frontiers remain on v0.2.0 (happycows on v0.1.6) — the version column
-  will update as each app's bump PR merges.
+  `CLAUDE.md`'s v0.3.2 entry for the full incident. **Scaffold, courses,
+  and dining are fully adopted** (PR #121, PR #331, and PR #147
+  respectively, all merged and verified); citelines and frontiers remain
+  on v0.2.0 (happycows on v0.1.6) — the version column will update as
+  each app's bump PR merges.
 - **v0.3.1** (startup recovery sweep — `@EventListener(ApplicationReadyEvent.class)`
   on `JobService` marks any job still `queued`/`running`/`cancelling` at
   boot as a new terminal status, `interrupted`; zero app wiring required)
@@ -47,7 +47,7 @@ scaffold → frontiers → dining → courses. happycows excluded — frozen unt
 ~2026-09-15 (see the table above). **Order adjusted twice since:** citelines
 was mid-deploy, so scaffold went first (2026-08-21, done); then citelines
 had unrelated cleanup work in progress, so courses went next (2026-08-22,
-done 2026-08-24). **Dining picked up next** (2026-08-24, PR #147 open).
+done 2026-08-24); dining picked up next and finished 2026-08-24 (PR #147).
 **Remaining: citelines, frontiers** — order between these two not yet
 decided.
 
