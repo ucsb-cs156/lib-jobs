@@ -536,8 +536,92 @@ when decisions change.
 
       **Remaining: citelines, frontiers** — order between these two not
       yet decided.
+
+      **Frontiers: PR ucsb-cs156/proj-frontiers#700 open (2026-08-25).**
+      Picked up next since citelines still had unrelated cleanup in
+      progress. By far the biggest surface area in the v0.3.x rollout so
+      far — frontiers has 16 job classes (vs. courses' 2-3 and dining's
+      1), 5 RestTemplate construction sites (vs. courses' 4), and two
+      separate Jobs UIs (the admin-global `AdminJobsPage` plus a
+      per-course `JobTabComponent` scaffold-style tab that none of the
+      other apps have needed to update for this feature yet).
+
+      Audited all 16 job classes for the silent-loop
+      `checkCancellation()` gap; 7 had no loop at all, 3 already logged
+      unconditionally on every iteration (safe as-is), and 6 needed a
+      new checkpoint added, 10 in total:
+      `CreateStudentOrStaffRepositoriesJob` (student loop, staff loop),
+      `CreateTeamRepositoriesJob` (team loop), `MembershipAuditJob`
+      (course loop, student loop, staff loop — the whole method only
+      logs once at the very start and once at the very end, so every one
+      of its three nested loops needed its own checkpoint),
+      `PullTeamsFromGithubJob` (team loop, and its per-member
+      `githubMemberships.forEach(...)` lambda), `RemoveStudentsJob`
+      (student loop), `UpdateOrgMembershipJob` (member loop).
+      `PullTeamsFromGithubJob`'s team loop is the closest analog yet to
+      the exact bug that drove v0.3.2 in the first place: the common
+      case on a re-sync is a team that's already correct on every field
+      with no membership changes either, which produces zero log output
+      for that iteration — confirmed the `Map.forEach`-with-`ctx.log()`
+      pattern cited in the v0.3.0 release notes as motivating
+      `JobCancelledException` being unchecked lives specifically in this
+      job (not, as that note implied, also in `PushTeamsToGithubJob`,
+      which turned out on inspection to use only plain `for` loops with
+      every branch logging — a minor inaccuracy in that historical note,
+      not worth correcting retroactively).
+
+      Getting pitest clean required one dedicated test per checkpoint
+      (10 total, following courses' established pattern: mock
+      `JobsRepository.findById` to report "running" for exactly the
+      calls known to precede the checkpoint, "cancelling" from then on,
+      assert both `JobCancelledException` is thrown and a downstream
+      call the checkpoint should have pre-empted was never made). Two
+      real test-authoring bugs surfaced and fixed along the way, both
+      worth watching for on any future checkpoint test: (1) a loop
+      preceded by multiple `ctx.log()` calls needs the mock to report
+      "running" for each of *those* first, since every `log()` call
+      internally checks cancellation too — stubbing "cancelling"
+      unconditionally makes the test pass for the wrong reason (throws
+      from an earlier log call, never reaching the loop's own check at
+      all, so the mutant that removes the checkpoint would go
+      undetected); (2) `RosterStudentRepository.findByCourseAndGithubId`
+      takes a primitive `int`, and verifying it with `any()` NPEs on
+      unboxing — needs `anyInt()`. That NPE, thrown mid-`verify()`, also
+      corrupted Mockito's argument-matcher stack for the rest of that
+      JVM fork, cascading into spurious `InvalidUseOfMatchers`/
+      `UnfinishedVerification` failures in unrelated, unmodified tests
+      in other classes later in the same `mvn test` run — worth
+      recognizing as a symptom (failures in tests you didn't touch,
+      alongside one you did that used a bad matcher) rather than chasing
+      each cascade failure individually.
+
+      Proactively applied the standing RestTemplate-timeout audit to all
+      5 construction sites (`OrganizationMemberService`, `JwtService`,
+      `OrganizationLinkerService`, `RepositoryService`,
+      `GithubTeamService`) — worse than courses' four. Checked for the
+      `AsyncJobTestsIT`-style mocked-`JobsRepository` bug — clean, no
+      such pattern in frontiers' tests (the one test class that does mock
+      `JobsRepository`, `JobsControllerJobsTests`, also mocks
+      `JobService` itself, so no real job body ever executes there).
+
+      Added the Cancel button to `JobsTable.jsx` in the same shape
+      established by courses (red Bootstrap button, shown only for
+      `queued`/`running`, POSTs to `/api/jobs/{id}/cancel` via
+      `useBackendMutation`, toasts "Cancellation requested.", calls an
+      `onCancelled` prop). Wired into both consumers: `AdminJobsPage`
+      (added `refetch` to its existing `useBackend` destructure) and
+      `JobTabComponent` (already destructured `refetch` for its own
+      Refresh button, just needed to pass it through).
+
+      Backend 707 tests, jacoco 100%, pitest 1120/1120. Frontend 515
+      tests, 100% coverage, eslint/prettier clean. Live dokku smoke test
+      (including the `PullTeamsFromGithubJob` silent-resync regression
+      check) still pending before merge.
+
+      **Remaining: citelines** — last app in the v0.3.x rollout
+      (happycows still excluded, frozen until ~2026-09-15).
 - [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
-      backend rollout finishes (citelines, frontiers, dining, courses).
+      backend rollout finishes (citelines).
 
       **Idea for a starting point (Phill, 2026-08-22):** scaffold has a
       frontend for individual, project-scoped job queues (`JobTabComponent`)
@@ -546,20 +630,34 @@ when decisions change.
       Worth checking whether the other apps have (or lack) the same gap
       before designing it, same as the backend drift survey did in phase 0.
 
+      **First real drift data point (found during the frontiers v0.3.x
+      rollout, PR #700):** frontiers, unlike scaffold, already has *both*
+      a per-course `JobTabComponent` and an admin-global `AdminJobsPage`
+      — the gap scaffold has doesn't generalize to every app. Worth
+      confirming the actual shape (which apps have which of the two
+      views, and how each one's `JobsTable` columns differ — e.g.
+      frontiers' has a "Course Id" column dining's bare curl/Swagger
+      access has no frontend equivalent of at all) once citelines'
+      rollout gives a fourth data point, before finalizing what Phase 7
+      actually builds.
+
       **Open question, not yet decided:** whether to build the Cancel
-      button as a shared component *before* finishing the v0.3.x rollout to
-      the remaining apps (citelines, frontiers, dining, courses), so each
-      app's rollout PR could consume it instead of reimplementing similar
-      JSX locally each time — versus continuing the current per-app JSX
-      pattern and tracking frontend differences across apps as they're
-      encountered, to give Phase 7 the same grounded drift-survey basis the
-      backend library had (phase 0), rather than generalizing prematurely
-      off of only scaffold's shape. Leaning toward the latter: publishing
-      an npm package is a heavier, slower-to-iterate commitment than local
-      JSX, and today's backend work needed three same-day point releases
+      button as a shared component *before* finishing the v0.3.x rollout
+      to the remaining app (citelines), so its rollout PR could consume
+      it instead of reimplementing similar JSX locally — versus
+      continuing the current per-app JSX pattern, to give Phase 7 the
+      same grounded drift-survey basis the backend library had (phase 0),
+      rather than generalizing prematurely off of only scaffold's shape.
+      Leaning toward the latter: publishing an npm package is a heavier,
+      slower-to-iterate commitment than local JSX, and the backend side
+      of this same feature needed three same-day point releases (scaffold)
       driven by things only live QA testing surfaced — a similar
       fast-iteration need seems likely on the frontend side too, better
-      absorbed locally per-app first.
+      absorbed locally per-app first. Frontiers' rollout reinforced this:
+      it needed its own JSX wiring into *two* separate consumers
+      (`AdminJobsPage` and `JobTabComponent`), a shape none of the other
+      three apps' rollouts had to handle, which a shared component built
+      too early might not have anticipated.
 
 Update the checklist above as phases complete.
 
