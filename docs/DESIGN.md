@@ -665,6 +665,93 @@ implementing:**
   exists to avoid for log writes. Fixed by wrapping the cancellation
   re-fetch in the same `logTransactionTemplate`.
 
+## 10. Job chaining (v0.3.3, shipped 2026-08-25)
+
+**The pattern:** a job's own `accept(JobContext ctx)` calls
+`jobService.runAsJob(childJob)` as (typically) its last statement, so
+completing one job automatically launches another. Mechanically trivial and
+not something `runAsJob` needs to know anything special about — except for
+one transaction-visibility hazard specific to how `JobService` is built.
+
+**Surfaced 2026-08-25** by a session working on citelines issue #110 (part
+2: auto-launching an "Improve BibTeX Entries" pass after Get
+References/Citations completes), before any app had actually built chaining
+— caught by tracing `JobService`'s transaction/threading behavior in
+advance, not by a live incident. Full write-up at
+`docs/job-chaining-analysis.md` (options considered, recommendation,
+citelines-side coordination notes as of that date) — the analysis below is
+the resolved version of that document's Option C.
+
+**The problem:** `runAsJob`'s initial `jobsRepository.save(job)` (creating
+the `queued` row) previously ran with Spring's default `REQUIRED`
+propagation. Called from a controller (every existing call site, until
+chaining), that's harmless — no ambient transaction to join, so it commits
+immediately, same as it always has. Called from *inside* a parent job's own
+`accept()` (chaining), the calling thread is already inside the parent's
+long-lived job-body transaction (`JobService.runJobAsync`'s
+`transactionTemplate.executeWithoutResult(...)`, §8), so `REQUIRED`
+propagation makes the child's `INSERT` join that same transaction — not
+durably visible to any other connection until the *parent's* transaction
+commits, which doesn't happen until the parent's own `accept()` returns
+entirely.
+
+With the default single-threaded `jobsExecutor`, this was always harmless:
+no other thread exists to dequeue the child until the parent's worker
+thread finishes running the parent's `runJobAsync` entirely (transaction
+commit included), so by the time the child is actually picked up its
+`queued` row is guaranteed committed. That's an accident of the executor's
+default pool size, not something `runAsJob`/`runJobAsync` ever guaranteed —
+and it's not purely hypothetical: courses already runs `jobsExecutor` at
+pool-size 2 (Phase 4, preserving pre-migration concurrency), so it was
+already one un-reviewed chaining call site away from hitting this for real.
+
+**With `jobsExecutor` at more than one thread**, a second thread can dequeue
+and start the child's `runJobAsync` — including its own `jobsRepository.save`
+status-transition writes — *before* the parent's transaction (holding the
+child's own uncommitted `INSERT`) commits. Concretely: the child's own
+`UPDATE jobs SET status='running' ...` matches against a row id that, from
+its own connection's MVCC snapshot, doesn't exist yet — 0 rows affected, no
+exception (Hibernate doesn't treat this as an error). The child's actual
+work still runs correctly (the in-memory `job`/`context` objects are valid
+regardless of DB visibility) and its log lines still get written, but every
+one of its own status-transition saves is the same kind of silent no-op —
+**the child's row is permanently stranded on `queued`** in the admin UI,
+indistinguishable from a job that's been sitting in the queue the whole
+time, even though its actual work completed normally in the background.
+
+**Fix:** `runAsJob`'s save now runs through a dedicated `TransactionTemplate`
+configured `PROPAGATION_REQUIRES_NEW` (same idiom §8/§9 already established
+for `logTransactionTemplate`'s log writes and cancellation re-fetch), so the
+`queued` row always commits — independent of whatever transaction, if any,
+is open on the calling thread — before `self.runJobAsync()` hands the job
+off to the executor. Small, self-contained, backward-compatible: nothing
+about `runJobAsync`'s own transaction handling changed, and calling
+`runAsJob` from a controller is unaffected (no ambient transaction there
+either way). Turns chaining from an undocumented accident of the default
+pool size into an actually-supported capability, with zero app-level
+workaround needed regardless of `jobsExecutor`'s thread count.
+
+**Empirically verified**, not just reasoned about: a new integration test
+(`JobChainingIntegrationTests`, `jobsExecutor` at pool-size 2 specifically —
+the default 1 everywhere else in the suite can't reproduce this race at
+all) launches a parent that chains a child and blocks before returning,
+giving the child's own worker thread a window to attempt its status
+transitions while the parent's transaction is still open. Hand-verified
+red/green: reverting just the `REQUIRES_NEW` wrap makes this test fail with
+a clean 10-second timeout (the child never leaves `queued`) every time;
+restoring the fix passes reliably. Getting pitest to 100% needed a second,
+deterministic unit test pinning the propagation behavior directly via
+reflection — the race itself is real but too timing-sensitive to reliably
+kill the "removed `setPropagationBehavior` call" mutant under pitest's
+differently-timed instrumented execution.
+
+**Not built, considered out of scope for now:** `Job.parentJobId` (UI
+traceability, "this job was launched by job #42") or a dedicated
+`JobContext.chainJob(...)` convenience method wrapping this fix plus a
+parent-link record. Not required to unblock citelines' chaining work;
+worth reconsidering if chaining turns out to be a recurring pattern across
+apps once citelines ships it.
+
 ## Appendix A: Drift survey (as of 2026-07-12, all repos' `main`)
 
 Measured by downloading and diffing the core files across repos.

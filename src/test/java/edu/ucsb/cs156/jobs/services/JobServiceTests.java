@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -56,6 +57,10 @@ public class JobServiceTests {
     ReflectionTestUtils.setField(jobService, "contextFactory", contextFactory);
     ReflectionTestUtils.setField(
         jobService, "transactionTemplate", new TransactionTemplate(platformTransactionManager));
+    ReflectionTestUtils.setField(
+        jobService,
+        "queuedRowTransactionTemplate",
+        new TransactionTemplate(platformTransactionManager));
     ReflectionTestUtils.setField(jobService, "self", selfMock);
   }
 
@@ -72,6 +77,27 @@ public class JobServiceTests {
     public Long getScopeId() {
       return 17L;
     }
+  }
+
+  /**
+   * Deterministic companion to the timing-based proof in JobChainingIntegrationTests: that test
+   * genuinely fails without the fix (verified by hand, reverting the fix and re-running), but its
+   * race is inherently timing-sensitive and isn't a reliable mutation-kill on its own under
+   * pitest's instrumented, differently-timed execution. This test pins the actual propagation
+   * behavior directly instead, so removing the setPropagationBehavior(...) call is caught every
+   * time, regardless of timing.
+   */
+  @Test
+  public void initQueuedRowTransactionTemplate_configures_REQUIRES_NEW_propagation() {
+    JobService freshJobService = new JobService();
+    ReflectionTestUtils.setField(freshJobService, "transactionManager", platformTransactionManager);
+
+    ReflectionTestUtils.invokeMethod(freshJobService, "initQueuedRowTransactionTemplate");
+
+    TransactionTemplate template =
+        (TransactionTemplate)
+            ReflectionTestUtils.getField(freshJobService, "queuedRowTransactionTemplate");
+    assertEquals(TransactionDefinition.PROPAGATION_REQUIRES_NEW, template.getPropagationBehavior());
   }
 
   @Test

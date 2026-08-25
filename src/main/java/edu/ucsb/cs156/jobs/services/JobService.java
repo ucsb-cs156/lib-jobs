@@ -6,6 +6,7 @@ import edu.ucsb.cs156.jobs.errors.EntityNotFoundException;
 import edu.ucsb.cs156.jobs.errors.JobCancelledException;
 import edu.ucsb.cs156.jobs.repositories.JobLogRepository;
 import edu.ucsb.cs156.jobs.repositories.JobsRepository;
+import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -16,6 +17,8 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -40,6 +43,31 @@ public class JobService {
 
   @Autowired private TransactionTemplate transactionTemplate;
 
+  @Autowired private PlatformTransactionManager transactionManager;
+
+  /*
+   * REQUIRES_NEW so the newly-queued Job row commits independently of whatever transaction (if
+   * any) is already open on the calling thread -- see docs/job-chaining-analysis.md. runAsJob() is
+   * safe to call from a controller (no ambient transaction, so this makes no observable
+   * difference) or from inside another job's own accept() (chaining): the parent job body runs
+   * inside transactionTemplate's long-lived transaction, and without REQUIRES_NEW here, the
+   * child's INSERT would join that same transaction and stay invisible to any other connection --
+   * including the child's own worker thread, once jobsExecutor picks it up -- until the parent's
+   * transaction eventually commits. That leaves the child's status updates racing an invisible
+   * row: silent no-op UPDATEs that never move it out of "queued" in the UI, even though its actual
+   * work completes normally in the background. Only reproduces with jobsExecutor at more than one
+   * thread (app.jobs.max-pool-size > 1); harmless with the default single thread, since nothing
+   * else can dequeue the child before the parent's save that started this method returns.
+   */
+  private TransactionTemplate queuedRowTransactionTemplate;
+
+  @PostConstruct
+  private void initQueuedRowTransactionTemplate() {
+    queuedRowTransactionTemplate = new TransactionTemplate(transactionManager);
+    queuedRowTransactionTemplate.setPropagationBehavior(
+        TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+  }
+
   public Job runAsJob(JobContextConsumer jobFunction) {
     Job job =
         Job.builder()
@@ -51,7 +79,7 @@ public class JobService {
             .scopeId(jobFunction.getScopeId())
             .build();
 
-    jobsRepository.save(job);
+    queuedRowTransactionTemplate.executeWithoutResult(status -> jobsRepository.save(job));
     log.info("Queued job: {}, jobName={}", job.getId(), job.getJobName());
     self.runJobAsync(job, jobFunction);
 
