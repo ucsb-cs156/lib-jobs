@@ -537,7 +537,8 @@ when decisions change.
       **Remaining: citelines, frontiers** — order between these two not
       yet decided.
 
-      **Frontiers: PR ucsb-cs156/proj-frontiers#700 open (2026-08-25).**
+      **Frontiers: DONE (PR ucsb-cs156/proj-frontiers#700, merged
+      2026-08-25).**
       Picked up next since citelines still had unrelated cleanup in
       progress. By far the biggest surface area in the v0.3.x rollout so
       far — frontiers has 16 job classes (vs. courses' 2-3 and dining's
@@ -614,9 +615,7 @@ when decisions change.
       Refresh button, just needed to pass it through).
 
       Backend 707 tests, jacoco 100%, pitest 1120/1120. Frontend 515
-      tests, 100% coverage, eslint/prettier clean. Live dokku smoke test
-      (including the `PullTeamsFromGithubJob` silent-resync regression
-      check) still pending before merge.
+      tests, 100% coverage, eslint/prettier clean.
 
       **Remaining: citelines** — last app in the v0.3.x rollout
       (happycows still excluded, frozen until ~2026-09-15).

@@ -13,7 +13,7 @@ narrative and can drift out of sync with actual repo state.
 | `proj-courses` | v0.3.2 | ✅ up to date | PR [#321](https://github.com/ucsb-cs156/proj-courses/pull/321) merged 2026-08-19 (v0.2.0), after Liquibase-infrastructure prep in [#316](https://github.com/ucsb-cs156/proj-courses/pull/316)/[#318](https://github.com/ucsb-cs156/proj-courses/pull/318)/[#319](https://github.com/ucsb-cs156/proj-courses/pull/319)/[#324](https://github.com/ucsb-cs156/proj-courses/pull/324). PR [#331](https://github.com/ucsb-cs156/proj-courses/pull/331) merged 2026-08-24 (v0.3.2, straight from v0.2.0): Cancel UI, RestTemplate timeouts on 4 construction sites, checkCancellation() checkpoints in UpdateCourseDataJob/GradeHistoryImportServiceImpl, and a real JobCancelledException-wrapping bug fix. Deploy blocked by an unrelated pre-existing Liquibase checksum mismatch (introduced by PR #330, hit live on courses-qa); fixed and merged separately as [#333](https://github.com/ucsb-cs156/proj-courses/pull/333) using the validCheckSums precedent from #324. Second app on v0.3.x. |
 | `proj-citelines` | v0.2.0 | ✅ up to date | PR [#97](https://github.com/ucsb-cs156/proj-citelines/pull/97) merged 2026-08-19. Added to the rollout 2026-08-16 (not one of the original five forks). |
 | `proj-happycows` | v0.1.6 | 🧊 frozen until mid-Sept 2026 | Migrated off homegrown jobs code to lib-jobs v0.1.6 via PR [#270](https://github.com/ucsb-cs156/proj-happycows/pull/270), merged 2026-08-08. **Not yet bumped to v0.2.0** — mission-critical, so Phill has explicitly frozen any higher-risk lib-jobs work here (including the v0.2.0 bump) until mid-September 2026. All other apps are fair game in the meantime. |
-| `proj-frontiers` | v0.2.0 | 🔄 PR open | PR [#694](https://github.com/ucsb-cs156/proj-frontiers/pull/694) merged 2026-08-21. First-ever lib-jobs adoption combined with the Course→scope migration (DESIGN.md §3.4) in one PR, landing directly on v0.2.0 — the last app in the original six-app rollout. v0.3.2 bump PR [#700](https://github.com/ucsb-cs156/proj-frontiers/pull/700) open 2026-08-25: biggest surface area of the v0.3.x rollout so far — checkCancellation() checkpoints added to 6 of 16 job classes (10 checkpoints total, including PullTeamsFromGithubJob's per-member forEach lambda), RestTemplate timeouts on all 5 construction sites, and a Cancel button added to JobsTable, wired into both AdminJobsPage and the per-course JobTabComponent. Backend 707 tests, jacoco 100%, pitest 1120/1120; frontend 515 tests, 100% coverage. |
+| `proj-frontiers` | v0.3.2 | ✅ up to date | PR [#694](https://github.com/ucsb-cs156/proj-frontiers/pull/694) merged 2026-08-21. First-ever lib-jobs adoption combined with the Course→scope migration (DESIGN.md §3.4) in one PR, landing directly on v0.2.0 — the last app in the original six-app rollout. v0.3.2 bump PR [#700](https://github.com/ucsb-cs156/proj-frontiers/pull/700) merged 2026-08-25: biggest surface area of the v0.3.x rollout so far — checkCancellation() checkpoints added to 6 of 16 job classes (10 checkpoints total, including PullTeamsFromGithubJob's per-member forEach lambda), RestTemplate timeouts on all 5 construction sites, and a Cancel button added to JobsTable, wired into both AdminJobsPage and the per-course JobTabComponent. Backend 707 tests, jacoco 100%, pitest 1120/1120; frontend 515 tests, 100% coverage. Fourth app on v0.3.x. |
 
 ## Library release status
 
@@ -26,10 +26,10 @@ narrative and can drift out of sync with actual repo state.
   on specific branches (the common case being silent) never gave
   cancellation a checkpoint to fire from during that silence — see
   `CLAUDE.md`'s v0.3.2 entry for the full incident. **Scaffold, courses,
-  and dining are fully adopted** (PR #121, PR #331, and PR #147
-  respectively, all merged and verified); **frontiers' bump PR #700 is
-  open** (2026-08-25); citelines remains on v0.2.0 (happycows on v0.1.6)
-  — the version column will update as each app's bump PR merges.
+  dining, and frontiers are fully adopted** (PR #121, PR #331, PR #147,
+  and PR #700 respectively, all merged and verified); citelines remains
+  on v0.2.0 (happycows on v0.1.6) — the version column will update once
+  its bump PR merges.
 - **v0.3.1** (startup recovery sweep — `@EventListener(ApplicationReadyEvent.class)`
   on `JobService` marks any job still `queued`/`running`/`cancelling` at
   boot as a new terminal status, `interrupted`; zero app wiring required)
@@ -48,9 +48,10 @@ scaffold → frontiers → dining → courses. happycows excluded — frozen unt
 was mid-deploy, so scaffold went first (2026-08-21, done); then citelines
 had unrelated cleanup work in progress, so courses went next (2026-08-22,
 done 2026-08-24); dining picked up next and finished 2026-08-24 (PR #147);
-frontiers picked up next, PR #700 open 2026-08-25 (citelines still had
-unrelated cleanup in progress). **Remaining: citelines** — last app in
-the v0.3.x rollout (happycows still excluded, frozen until ~2026-09-15).
+frontiers picked up next and finished 2026-08-25 (PR #700, citelines
+still had unrelated cleanup in progress). **Remaining: citelines** —
+last app in the v0.3.x rollout (happycows still excluded, frozen until
+~2026-09-15).
 
 **Standing action items for every remaining app's v0.3.x rollout PR**
 (citelines — Phill, 2026-08-21), both found during scaffold's live QA
