@@ -724,6 +724,31 @@ when decisions change.
       except happycows** (frozen until ~2026-09-15) — scaffold, courses,
       dining, and frontiers are merged on v0.3.2; citelines' v0.3.3 PR is
       open.
+
+      **Defensive v0.3.3 bumps for the other four apps, same day
+      (2026-08-25).** Phill asked whether courses needed v0.3.3 too,
+      since it runs `jobsExecutor` at pool-size 2 — checked, and it
+      doesn't: courses' two `runAsJob` call sites are a `@Scheduled` cron
+      method and two app-startup hooks, none of which run inside another
+      job's own transaction, so it doesn't chain jobs today. Phill then
+      asked to check frontiers as well (correctly guessing it was the
+      most likely candidate, given its size); also clean — none of its
+      16 job classes reference `JobService`/`runAsJob` at all. Proactively
+      checked scaffold and dining too, for full coverage; also clean.
+      Rather than leave the gap latent in four apps that happened not to
+      need it *yet*, opened defensive version-only bump PRs for all four
+      in parallel via subagents (pure `pom.xml` changes, no app-code
+      touched, since none of them have anything to fix): dining
+      [#148](https://github.com/ucsb-cs156/proj-dining/pull/148),
+      scaffold [#123](https://github.com/ucsb-cs156/proj-scaffold/pull/123),
+      courses [#337](https://github.com/ucsb-cs156/proj-courses/pull/337),
+      frontiers [#701](https://github.com/ucsb-cs156/proj-frontiers/pull/701).
+      All four green: dining 186 tests; scaffold 833 backend/706
+      frontend; courses 424 backend/669 frontend; frontiers 707
+      backend/515 frontend (100% coverage) — jacoco 100% on every
+      backend. **With these four open plus citelines' #125, every
+      adopted app now has a v0.3.3 bump in flight** (happycows still
+      excluded, frozen until ~2026-09-15).
 - [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
       backend rollout finishes (citelines).
 
