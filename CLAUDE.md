@@ -618,7 +618,112 @@ when decisions change.
       tests, 100% coverage, eslint/prettier clean.
 
       **Remaining: citelines** — last app in the v0.3.x rollout
-      (happycows still excluded, frozen until ~2026-09-15).
+      (happycows still excluded, frozen until ~2026-09-15). Deferred
+      twice already for unrelated cleanup work in that repo; picked back
+      up 2026-08-25, see the v0.3.3 entry below — it ended up targeting
+      v0.3.3 directly rather than v0.3.2.
+
+- [x] **v0.3.3 release** (2026-08-25): fixes a job-chaining
+      transaction-visibility race in `JobService.runAsJob`. Surfaced by a
+      session working on citelines issue #110 part 2 (auto-launching one
+      job from inside another's own `accept()` via
+      `jobService.runAsJob(child)`) — flagged proactively, before any app
+      built chaining or hit the bug live, and full mechanics/options
+      written up at `docs/job-chaining-analysis.md` (not committed by
+      that session; committed here alongside the fix). Resolved analysis
+      now also lives in `DESIGN.md` §10.
+
+      **The bug:** `runAsJob`'s initial `queued`-row save previously used
+      Spring's default `REQUIRED` transaction propagation. Called from a
+      controller (every call site before chaining existed), harmless — no
+      ambient transaction to join. Called from *inside* a parent job's
+      own `accept()`, the calling thread is already inside the parent's
+      long-lived job-body transaction (`runJobAsync`'s
+      `transactionTemplate.executeWithoutResult(...)`), so the child's
+      `INSERT` joined that same transaction — invisible to any other
+      connection, including the child's own worker thread once
+      `jobsExecutor` picked it up, until the *parent's* transaction
+      eventually committed. With `jobsExecutor` at more than one thread, a
+      second thread could dequeue and start updating the child's row
+      before that commit — every one of the child's own status-transition
+      `UPDATE`s matched 0 rows (Postgres doesn't error on this), silently
+      stranding the child on `queued` forever in the admin UI even though
+      its actual work completed normally. Harmless only with the default
+      single-threaded executor — and not hypothetical: **courses already
+      runs `jobsExecutor` at pool-size 2** (Phase 4, preserving
+      pre-migration concurrency), so it was one un-reviewed chaining call
+      site away from hitting this for real.
+
+      **Fix:** `runAsJob`'s save now runs through a dedicated
+      `TransactionTemplate` configured `PROPAGATION_REQUIRES_NEW` — same
+      idiom §8/§9 already established for `logTransactionTemplate`'s log
+      writes and the cancellation re-fetch. Small, self-contained,
+      backward-compatible: `runJobAsync`'s own transaction handling is
+      unchanged, and calling `runAsJob` from a controller behaves exactly
+      as before.
+
+      **Empirically verified, not just reasoned about:** a new
+      integration test (`JobChainingIntegrationTests`, `jobsExecutor` at
+      pool-size 2 — the default 1 everywhere else in the suite can't
+      reproduce this race at all) launches a parent that chains a child
+      and blocks before returning, giving the child's own worker thread a
+      window to attempt its status transitions while the parent's
+      transaction is still open. Hand-verified red/green by temporarily
+      reverting just the `REQUIRES_NEW` wrap: the test then fails with a
+      clean 10-second timeout (the child never leaves `queued`) every
+      time; restoring the fix passes reliably. Getting pitest to 100%
+      needed a second, deterministic unit test pinning the propagation
+      behavior directly via reflection — the race itself is real but too
+      timing-sensitive to reliably kill the "removed
+      `setPropagationBehavior` call" mutant under pitest's
+      differently-timed instrumented execution.
+
+      93 tests, jacoco 100%, pitest 86/86. Tagged and verified on JitPack
+      (`com.github.ucsb-cs156:lib-jobs:v0.3.3` resolves).
+
+      **Citelines: PR ucsb-cs156/proj-citelines#125 open (2026-08-25).**
+      Bumped straight to v0.3.3 rather than stopping at v0.3.2, since
+      it's the one app about to build chaining (issue #110 part 2, not
+      yet started). Branched from pre-#119 `main` (the
+      `BibTexEntryUpgrade*` → `BibTexEntryImprove*` rename, plus
+      scope-aware `ImproveScope` support) and cleanly rebased once #119
+      merged, so the checkCancellation() checkpoint below targets the
+      renamed class/method rather than the old one. Added
+      `ctx.checkCancellation()` to the two service loops that don't log
+      on every iteration: `CheckLinksService`'s per-entry loop (the
+      common case — a valid, unchanged link — never logs) and
+      `BibTexEntryImproveService.improveEntries`'s per-entry loop (an
+      entry with no DOI or nothing new to add never logs either).
+
+      **Real regression caught and fixed before merge, not after:** the
+      first RestTemplate-timeout attempt used an injected
+      `RestTemplateBuilder` parameter on the primary `RestTemplate` bean
+      — broke every single `@WebMvcTest`-sliced controller test (220
+      failures) because that auto-configured bean isn't provided in that
+      narrower test slice, only in a full `@SpringBootTest` context.
+      Fixed by building the timeout via `SimpleClientHttpRequestFactory`
+      directly instead (no injected bean dependency at all), matching how
+      the app's *second* RestTemplate bean (no-redirect, for DOI lookups)
+      already avoids redirects the same low-level way. Worth checking for
+      on any future app whose `RestTemplate` beans are also loaded inside
+      `@WebMvcTest`-sliced contexts, not just full integration tests —
+      running the *entire* backend test suite (not just the touched
+      service's own tests) is what caught this, a spot-check of
+      `CheckLinksServiceTests` alone would have missed it entirely.
+
+      Checked for the `AsyncJobTestsIT`-style mocked-`JobsRepository`
+      bug — clean, the one test class that mocks `JobsRepository` also
+      mocks `JobService` itself, so no real job body ever executes there.
+
+      Backend 713 tests, jacoco 100%, pitest 926/926. Frontend 542 tests
+      (citelines' coverage gate is 70%/75%/60%, not 100% like
+      courses/frontiers — comfortably cleared). Live smoke test still
+      pending before merge, same as every other app in this rollout.
+
+      **The v0.3.x rollout is now effectively complete for every app
+      except happycows** (frozen until ~2026-09-15) — scaffold, courses,
+      dining, and frontiers are merged on v0.3.2; citelines' v0.3.3 PR is
+      open.
 - [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
       backend rollout finishes (citelines).
 
