@@ -681,7 +681,8 @@ when decisions change.
       93 tests, jacoco 100%, pitest 86/86. Tagged and verified on JitPack
       (`com.github.ucsb-cs156:lib-jobs:v0.3.3` resolves).
 
-      **Citelines: PR ucsb-cs156/proj-citelines#125 open (2026-08-25).**
+      **Citelines: DONE (PR ucsb-cs156/proj-citelines#125, merged
+      2026-08-25).**
       Bumped straight to v0.3.3 rather than stopping at v0.3.2, since
       it's the one app about to build chaining (issue #110 part 2, not
       yet started). Branched from pre-#119 `main` (the
@@ -717,8 +718,11 @@ when decisions change.
 
       Backend 713 tests, jacoco 100%, pitest 926/926. Frontend 542 tests
       (citelines' coverage gate is 70%/75%/60%, not 100% like
-      courses/frontiers — comfortably cleared). Live smoke test still
-      pending before merge, same as every other app in this rollout.
+      courses/frontiers — comfortably cleared). Merged same day, ahead
+      of the batch of defensive v0.3.3 bumps below (this PR started
+      first and was the only one with actual app-code changes to
+      verify, so it landed before the four pure-version-bump PRs even
+      existed).
 
       **The v0.3.x rollout is now effectively complete for every app
       except happycows** (frozen until ~2026-09-15) — scaffold, courses,
@@ -749,8 +753,10 @@ when decisions change.
       backend. **With these four open plus citelines' #125, every
       adopted app now has a v0.3.3 bump in flight** (happycows still
       excluded, frozen until ~2026-09-15).
-- [ ] Phase 7: frontend package in `frontend/`. On hold until the v0.3.x
-      backend rollout finishes (citelines).
+- [ ] Phase 7: frontend package in `frontend/`. Was on hold until the
+      v0.3.x backend rollout finished — it now has, as of citelines' PR
+      #125 (2026-08-25) — so Phase 7 is unblocked to start whenever it's
+      picked up; not yet begun.
 
       **Idea for a starting point (Phill, 2026-08-22):** scaffold has a
       frontend for individual, project-scoped job queues (`JobTabComponent`)
@@ -759,34 +765,34 @@ when decisions change.
       Worth checking whether the other apps have (or lack) the same gap
       before designing it, same as the backend drift survey did in phase 0.
 
-      **First real drift data point (found during the frontiers v0.3.x
-      rollout, PR #700):** frontiers, unlike scaffold, already has *both*
-      a per-course `JobTabComponent` and an admin-global `AdminJobsPage`
-      — the gap scaffold has doesn't generalize to every app. Worth
-      confirming the actual shape (which apps have which of the two
-      views, and how each one's `JobsTable` columns differ — e.g.
-      frontiers' has a "Course Id" column dining's bare curl/Swagger
-      access has no frontend equivalent of at all) once citelines'
-      rollout gives a fourth data point, before finalizing what Phase 7
-      actually builds.
+      **Drift survey, now complete across all five apps:** scaffold has
+      only the per-course `JobTabComponent`, no admin-global view — the
+      original gap. Frontiers (PR #700) and citelines (PR #125) both have
+      *both* a per-course/per-project `JobTabComponent`/`JobsTabComponent`
+      and an admin-global `AdminJobsPage` — scaffold's gap doesn't
+      generalize to every app. Dining has neither (no frontend Jobs UI at
+      all, admin access via curl/Swagger only). Courses' shape wasn't
+      re-verified during its own v0.3.x rollout (its bump PR #331 was
+      already Cancel-UI-complete going in) but per its phase-4/phase-5
+      history has an `AdminJobsPage` at minimum. `JobsTable` column sets
+      also differ per app — e.g. frontiers' has a "Course Id" column;
+      citelines' has a generic "Scope" column (`scopeType:scopeId`)
+      instead, reflecting its multi-entity-type scoping vs. frontiers'
+      course-only scoping. This is the grounded basis Phase 7 should
+      design against, whenever it's picked up.
 
-      **Open question, not yet decided:** whether to build the Cancel
-      button as a shared component *before* finishing the v0.3.x rollout
-      to the remaining app (citelines), so its rollout PR could consume
-      it instead of reimplementing similar JSX locally — versus
-      continuing the current per-app JSX pattern, to give Phase 7 the
-      same grounded drift-survey basis the backend library had (phase 0),
-      rather than generalizing prematurely off of only scaffold's shape.
-      Leaning toward the latter: publishing an npm package is a heavier,
-      slower-to-iterate commitment than local JSX, and the backend side
-      of this same feature needed three same-day point releases (scaffold)
-      driven by things only live QA testing surfaced — a similar
-      fast-iteration need seems likely on the frontend side too, better
-      absorbed locally per-app first. Frontiers' rollout reinforced this:
-      it needed its own JSX wiring into *two* separate consumers
-      (`AdminJobsPage` and `JobTabComponent`), a shape none of the other
-      three apps' rollouts had to handle, which a shared component built
-      too early might not have anticipated.
+      **Resolved, not just leaning:** the earlier open question (build
+      the Cancel button as a shared component before finishing the
+      v0.3.x rollout, vs. keep it per-app JSX) is now moot — the rollout
+      finished with every app's Cancel button hand-written locally,
+      confirming the "leaning toward per-app JSX" call from 2026-08-22.
+      Justified in hindsight: frontiers needed JSX wiring into *two*
+      separate consumers (`AdminJobsPage` and `JobTabComponent`), and
+      citelines' `JobsTable` needed a different Scope column entirely —
+      variation a shared component built too early might not have
+      anticipated. Phase 7, whenever started, now has five real apps'
+      worth of actual drift to design from instead of generalizing off
+      of one.
 
 Update the checklist above as phases complete.
 
