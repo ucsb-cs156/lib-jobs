@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -199,15 +200,46 @@ public class JobService {
     return jobLogRepository.findByJobIdAndIdGreaterThanOrderByIdAsc(jobId, afterId);
   }
 
+  /** Number of trailing log lines included as a preview on list/paginated responses. */
+  public static final int LOG_PREVIEW_LINES = 10;
+
   /**
-   * The most recent log lines for one job, joined into a single string oldest-first — used to
-   * populate a preview on list/paginated responses without shipping each job's entire log. Assumes
-   * the job id is already known-valid (the caller has just fetched a page of {@link Job} rows).
+   * The most recent {@value #LOG_PREVIEW_LINES} log lines for one job, joined into a single string
+   * oldest-first — used to populate a preview on list/paginated responses without shipping each
+   * job's entire log. Assumes the job id is already known-valid (the caller has just fetched a page
+   * of {@link Job} rows).
+   *
+   * <p>Since v0.4.1, a preview that omits anything starts with a marker line of the form {@code
+   * "... 27 earlier lines omitted (37 lines total)"}, so a reader can tell it is looking at a tail
+   * and not the whole log (the full log is at {@code GET /api/jobs/logs/{id}}). Before this, a long
+   * log's preview was indistinguishable from a short log, which was reported in one app as "log
+   * lines are going missing". The marker is a separate first line, so an app that splits the
+   * preview on newlines sees {@code LOG_PREVIEW_LINES + 1} lines exactly when truncation happened.
+   *
+   * <p>Implementation: fetches one row more than the preview size, so the common case (a short log)
+   * costs one query; only a truncated preview pays for the extra {@code COUNT}. If lines land
+   * between the two queries the "total" can be slightly high; harmless for a preview.
    */
   public String getJobLogPreview(Long jobId) {
-    List<JobLog> tail = jobLogRepository.findTop10ByJobIdOrderByIdDesc(jobId);
-    List<JobLog> chronological = new ArrayList<>(tail);
+    List<JobLog> newestFirst =
+        jobLogRepository.findByJobIdOrderByIdDesc(jobId, PageRequest.of(0, LOG_PREVIEW_LINES + 1));
+    boolean truncated = newestFirst.size() > LOG_PREVIEW_LINES;
+    List<JobLog> chronological =
+        new ArrayList<>(truncated ? newestFirst.subList(0, LOG_PREVIEW_LINES) : newestFirst);
     Collections.reverse(chronological);
-    return chronological.stream().map(JobLog::getMessage).collect(Collectors.joining("\n"));
+    String preview =
+        chronological.stream().map(JobLog::getMessage).collect(Collectors.joining("\n"));
+    if (!truncated) {
+      return preview;
+    }
+    long total = jobLogRepository.countByJobId(jobId);
+    long omitted = total - LOG_PREVIEW_LINES;
+    return omittedLinesMarker(omitted, total) + "\n" + preview;
+  }
+
+  /** The first line of a truncated preview; see {@link #getJobLogPreview}. */
+  public static String omittedLinesMarker(long omitted, long total) {
+    return String.format(
+        "... %d earlier line%s omitted (%d lines total)", omitted, omitted == 1 ? "" : "s", total);
   }
 }

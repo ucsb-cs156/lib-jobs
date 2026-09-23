@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,6 +28,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -289,14 +293,90 @@ public class JobServiceTests {
     assertThrows(EntityNotFoundException.class, () -> jobService.getJobLogTail(7L, 0L));
   }
 
+  /**
+   * {@code n} lines, newest first, as the repository's DESC query returns them: line n .. line 1.
+   */
+  private static List<JobLog> newestFirst(long jobId, int n) {
+    List<JobLog> lines = new ArrayList<>();
+    for (int i = n; i >= 1; i--) {
+      lines.add(JobLog.builder().jobId(jobId).message("line " + i).build());
+    }
+    return lines;
+  }
+
   @Test
   public void getJobLogPreview_reverses_the_newest_first_query_to_chronological_order() {
-    when(jobLogRepository.findTop10ByJobIdOrderByIdDesc(7L))
+    when(jobLogRepository.findByJobIdOrderByIdDesc(eq(7L), any(Pageable.class)))
         .thenReturn(
             List.of(
                 JobLog.builder().jobId(7L).message("newest").build(),
                 JobLog.builder().jobId(7L).message("oldest of the tail").build()));
 
     assertEquals("oldest of the tail\nnewest", jobService.getJobLogPreview(7L));
+    verify(jobLogRepository, never()).countByJobId(any());
+  }
+
+  @Test
+  public void getJobLogPreview_asks_for_one_more_row_than_the_preview_size() {
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    when(jobLogRepository.findByJobIdOrderByIdDesc(eq(7L), pageable.capture()))
+        .thenReturn(List.of());
+
+    assertEquals("", jobService.getJobLogPreview(7L));
+    assertEquals(PageRequest.of(0, JobService.LOG_PREVIEW_LINES + 1), pageable.getValue());
+  }
+
+  @Test
+  public void getJobLogPreview_with_exactly_the_preview_size_has_no_marker_and_no_count_query() {
+    when(jobLogRepository.findByJobIdOrderByIdDesc(eq(7L), any(Pageable.class)))
+        .thenReturn(newestFirst(7L, JobService.LOG_PREVIEW_LINES));
+
+    String preview = jobService.getJobLogPreview(7L);
+
+    assertEquals(
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10", preview);
+    verify(jobLogRepository, never()).countByJobId(any());
+  }
+
+  @Test
+  public void getJobLogPreview_with_one_extra_line_prefixes_a_singular_omitted_marker() {
+    // the query returns LOG_PREVIEW_LINES + 1 rows: that extra row is the truncation signal
+    when(jobLogRepository.findByJobIdOrderByIdDesc(eq(7L), any(Pageable.class)))
+        .thenReturn(newestFirst(7L, JobService.LOG_PREVIEW_LINES + 1));
+    when(jobLogRepository.countByJobId(7L)).thenReturn(11L);
+
+    String preview = jobService.getJobLogPreview(7L);
+
+    assertEquals(
+        "... 1 earlier line omitted (11 lines total)\n"
+            + "line 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11",
+        preview);
+    assertEquals(JobService.LOG_PREVIEW_LINES + 1, preview.split("\n").length);
+  }
+
+  @Test
+  public void getJobLogPreview_of_a_long_log_reports_how_many_lines_were_omitted() {
+    // the repository only ever hands back LOG_PREVIEW_LINES + 1 rows; the count query
+    // supplies the real total
+    when(jobLogRepository.findByJobIdOrderByIdDesc(eq(7L), any(Pageable.class)))
+        .thenReturn(newestFirst(7L, JobService.LOG_PREVIEW_LINES + 1));
+    when(jobLogRepository.countByJobId(7L)).thenReturn(37L);
+
+    String preview = jobService.getJobLogPreview(7L);
+
+    assertTrue(
+        preview.startsWith("... 27 earlier lines omitted (37 lines total)\nline 2\n"),
+        "preview was: " + preview);
+    assertTrue(preview.endsWith("\nline 11"), "preview was: " + preview);
+  }
+
+  @Test
+  public void omittedLinesMarker_pluralizes() {
+    assertEquals(
+        "... 1 earlier line omitted (11 lines total)", JobService.omittedLinesMarker(1, 11));
+    assertEquals(
+        "... 0 earlier lines omitted (10 lines total)", JobService.omittedLinesMarker(0, 10));
+    assertEquals(
+        "... 2 earlier lines omitted (12 lines total)", JobService.omittedLinesMarker(2, 12));
   }
 }

@@ -808,7 +808,28 @@ when decisions change.
       than 10 lines silently shows only its tail. Courses' `AdminJobLogPage`
       (fetches `/api/jobs/logs/{id}`) is the precedent for the fix; the
       library could also make truncation self-evident (e.g. a leading
-      "… N earlier lines omitted" marker). Fix not yet decided/started.
+      "… N earlier lines omitted" marker). Both fixes in flight, see below.
+
+- [ ] **v0.4.1: log-preview truncation marker** (2026-09-23, branch
+      `pc-log-preview-marker`). `JobService.getJobLogPreview` now fetches
+      `LOG_PREVIEW_LINES + 1` rows via `findByJobIdOrderByIdDesc(jobId,
+      Pageable)` and, only when the extra row comes back, runs a new
+      `countByJobId` and prefixes `... N earlier lines omitted (T lines
+      total)` as its own first line. `LOG_PREVIEW_LINES` moved to
+      `JobService` (controller keeps an alias); the unused
+      `findTop10ByJobIdOrderByIdDesc` query was dropped (no app called it —
+      checked all six). Real-DB integration test covers the Pageable derived
+      query + COUNT, which mocked tests can't. Side effect worth knowing:
+      courses' `JobsTable` gates its "See entire log" link on
+      `logLines.length > 10`, which a 10-line preview could never satisfy;
+      with the marker line it fires exactly when truncated, so courses gets
+      its link back for free on bumping. DESIGN.md §8 has the addendum.
+
+      **Frontiers' UI fix** (full-log page + course-scoped
+      `GET /api/jobs/course/logs?courseId&jobId` endpoint, since the
+      library's `/logs/{id}` is admin-only and the course jobs tab is used
+      by non-admin instructors; "View full log" link on every row of both
+      tables) is being built as a separate frontiers PR by a subagent.
 - [ ] Phase 7: frontend package in `frontend/`. Was on hold until the
       v0.3.x backend rollout finished — it now has, as of citelines' PR
       #125 (2026-08-25) — so Phase 7 is unblocked to start whenever it's
