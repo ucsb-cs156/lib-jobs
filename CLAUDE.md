@@ -753,6 +753,23 @@ when decisions change.
       backend. **With these four open plus citelines' #125, every
       adopted app now has a v0.3.3 bump in flight** (happycows still
       excluded, frozen until ~2026-09-15).
+- [ ] **Spring Boot 3.5.16 / Java 25 migration** (issue #2, PR opened
+      2026-09-23, following the recipe from proj-citelines#137 and the
+      in-progress proj-courses Java 25 branch): Boot parent 3.4.3 → 3.5.16,
+      `java.version`/`.java-version`/`jitpack.yml` → 25, `<proc>full</proc>`
+      on maven-compiler-plugin (JDK 23+ no longer runs classpath annotation
+      processors, so Lombok generates nothing without it),
+      git-code-format 5.3 → 6.1 (needs the extra `javac.code` add-export in
+      `.mvn/jvm.config`), jacoco 0.8.12 → 0.8.15, pitest 1.17.0 → 1.30.0 +
+      pitest-junit5-plugin 1.2.3 + pitest-history-plugin 0.0.1 (history moved
+      out of core in 1.23). No source changes needed; formatter 6.1 reformats
+      nothing here. **Consumer impact:** the jar is now class-file major
+      version 69, so the next tag is Java-25-only — apps must migrate to
+      Java 25 before bumping past v0.3.3 (existing tags keep building on
+      their own `jitpack.yml`, so Java 21 apps are unaffected until they
+      bump). Happycows (frozen until ~2026-09-15, now expired) and the other
+      Java 21 apps therefore need their own Java 25 migration before any
+      future lib-jobs bump.
 - [ ] Phase 7: frontend package in `frontend/`. Was on hold until the
       v0.3.x backend rollout finished — it now has, as of citelines' PR
       #125 (2026-08-25) — so Phase 7 is unblocked to start whenever it's
