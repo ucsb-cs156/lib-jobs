@@ -753,23 +753,62 @@ when decisions change.
       backend. **With these four open plus citelines' #125, every
       adopted app now has a v0.3.3 bump in flight** (happycows still
       excluded, frozen until ~2026-09-15).
-- [ ] **Spring Boot 3.5.16 / Java 25 migration** (issue #2, PR opened
-      2026-09-23, following the recipe from proj-citelines#137 and the
-      in-progress proj-courses Java 25 branch): Boot parent 3.4.3 → 3.5.16,
+- [x] **Spring Boot 3.5.16 / Java 25 migration — v0.4.0 released 2026-09-23**
+      (issue #2, PR #3, merged and tagged same day; JitPack build of the tag
+      verified: `Using java version 25.0.2-open`, BUILD SUCCESS,
+      `com.github.ucsb-cs156:lib-jobs:v0.4.0` resolves). Recipe, identical to
+      proj-citelines#137 / proj-courses#350: Boot parent 3.4.3 → 3.5.16,
       `java.version`/`.java-version`/`jitpack.yml` → 25, `<proc>full</proc>`
       on maven-compiler-plugin (JDK 23+ no longer runs classpath annotation
-      processors, so Lombok generates nothing without it),
-      git-code-format 5.3 → 6.1 (needs the extra `javac.code` add-export in
+      processors, so Lombok generates nothing without it), git-code-format
+      5.3 → 6.1 (needs the extra `javac.code` add-export in
       `.mvn/jvm.config`), jacoco 0.8.12 → 0.8.15, pitest 1.17.0 → 1.30.0 +
       pitest-junit5-plugin 1.2.3 + pitest-history-plugin 0.0.1 (history moved
-      out of core in 1.23). No source changes needed; formatter 6.1 reformats
-      nothing here. **Consumer impact:** the jar is now class-file major
-      version 69, so the next tag is Java-25-only — apps must migrate to
-      Java 25 before bumping past v0.3.3 (existing tags keep building on
-      their own `jitpack.yml`, so Java 21 apps are unaffected until they
-      bump). Happycows (frozen until ~2026-09-15, now expired) and the other
-      Java 21 apps therefore need their own Java 25 migration before any
-      future lib-jobs bump.
+      out of core in 1.23; verified "Incremental analysis reduced number of
+      mutations" on a second run). No source changes; formatter 6.1
+      reformatted nothing. pom `<version>` finally aligned with the tag
+      (0.4.0 — it had said 0.1.0 since the first release; JitPack rewrites
+      it to the tag name so it never mattered). 93 tests, jacoco 100%, pitest
+      83/83. `jitpack.yml` `jdk: openjdk25` is undocumented by JitPack but
+      works (verified by building a branch commit before tagging).
+
+      **Consumer impact:** v0.4.0 jars are class-file major version 69, so
+      v0.3.3 is the last release a Java 21 app can load. Moot in practice:
+      all six apps were already on Boot 3.5.16 / Java 25 by the time this
+      shipped (Phill did those migrations the same day). Pure version-bump
+      PRs (one-line pom change, no app code) opened 2026-09-23 via parallel
+      subagents, all CI-green: citelines #139 (763 tests), courses #352
+      (439), scaffold #129 (833), dining #156 (190), frontiers #777 (989);
+      jacoco 100% on every backend. Subagent notes: the worktree pre-commit
+      hook bug did NOT reproduce on any of the five (so it's environment/
+      version dependent, not universal); `jacoco:check` must be invoked as
+      `jacoco:check@check` in these poms; give parallel agents unique log
+      file names (two of them clobbered a shared `mvn-test.log`).
+
+      **Happycows is the exception:** still on v0.1.6, so its "bump" is the
+      whole deferred v0.2.0 job_logs migration (own `jobs` table with a
+      `LOG` column, real production history → needs the scaffold/courses
+      stage/complete backfill pair around the library's `002` changeset,
+      include only that changeset) plus the v0.3.x Cancel button and a
+      "view full log" page (its `PagedJobsTable` renders `log` inline, and
+      list endpoints only return a 10-line preview since v0.2.0). Scoped in
+      ucsb-cs156/proj-happycows#336 after a read-only survey: no RestTemplate
+      sites, no chaining, no mocked-`JobsRepository` tests, no silent loops
+      needing `checkCancellation()`; its 11 job tests use the preserved
+      `new JobContext(null, job)` test seam so they should pass unchanged.
+      Not started.
+
+      **Frontiers "missing log lines" (reported by Phill 2026-09-23) — not
+      a race.** Frontiers' `JobsTable` (both `AdminJobsPage` and the
+      per-course `JobTabComponent`) renders `job.log` from `/api/jobs/all`
+      and `/api/jobs/course`, which since v0.2.0 carry only the last
+      `LOG_PREVIEW_LINES` (10) lines via `getJobLogPreview`; before PR #694
+      the homegrown `Job.log` column held the full text and `/all` returned
+      it. There is no "view full log" link in frontiers, so any log longer
+      than 10 lines silently shows only its tail. Courses' `AdminJobLogPage`
+      (fetches `/api/jobs/logs/{id}`) is the precedent for the fix; the
+      library could also make truncation self-evident (e.g. a leading
+      "… N earlier lines omitted" marker). Fix not yet decided/started.
 - [ ] Phase 7: frontend package in `frontend/`. Was on hold until the
       v0.3.x backend rollout finished — it now has, as of citelines' PR
       #125 (2026-08-25) — so Phase 7 is unblocked to start whenever it's
