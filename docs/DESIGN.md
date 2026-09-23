@@ -277,7 +277,9 @@ Per consuming app:
   18 (db-schema validation: boots the src/test `TestApplication` with
   `ddl-auto=validate` against the shipped Liquibase changelog), 56/58
   (javadoc for main/PRs to gh-pages). Shared-workflow requirements the repo
-  satisfies: `.java-version` file, `.mvn/jvm.config` with the
+  satisfies: `.java-version` file (25 — the shared workflows read the JDK
+  version from it, and `jitpack.yml` must pin the same JDK for release
+  builds), `.mvn/jvm.config` with the
   `--add-exports jdk.compiler/...` flags google-java-format needs, and a
   `spring-boot-maven-plugin` config that can boot the test app
   (`useTestClasspath` + test-classes on the classpath) while skipping

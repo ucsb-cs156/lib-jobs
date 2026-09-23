@@ -33,9 +33,15 @@ survey of the existing implementations, decoupling decisions, publishing setup
 <dependency>
   <groupId>com.github.ucsb-cs156</groupId>
   <artifactId>lib-jobs</artifactId>
-  <version>v0.1.0</version>
+  <version>v0.4.0</version>
 </dependency>
 ```
+
+**Java requirement:** releases after v0.3.3 are compiled for **Java 25**
+(the library itself builds with Spring Boot 3.5.16 / JDK 25). An app still
+on Java 21 cannot load those jars (`UnsupportedClassVersionError`); finish
+the app's own Java 25 migration first, or stay on `v0.3.3`, the last
+Java 21 release.
 
 The consuming app must provide two things:
 
@@ -165,6 +171,10 @@ Any library bean can be overridden by defining a bean of the same type (or the
 name `jobsExecutor`) in the app.
 
 ## Development
+
+Requires a **JDK 25** (e.g. `sdk install java 25.0.4-tem`); `.java-version`
+pins 25 for CI and for jenv/asdf users, and `jitpack.yml` pins the same JDK
+for release builds.
 
 ```bash
 mvn test                        # tests + jacoco (100% required); runs against
