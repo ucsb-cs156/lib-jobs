@@ -810,8 +810,9 @@ when decisions change.
       library could also make truncation self-evident (e.g. a leading
       "… N earlier lines omitted" marker). Both fixes in flight, see below.
 
-- [ ] **v0.4.1: log-preview truncation marker** (2026-09-23, branch
-      `pc-log-preview-marker`). `JobService.getJobLogPreview` now fetches
+- [x] **v0.4.1: log-preview truncation marker** (issue #4, PR #5, merged
+      and tagged 2026-09-23; JitPack build verified on JDK 25.0.2,
+      `com.github.ucsb-cs156:lib-jobs:v0.4.1` resolves). `JobService.getJobLogPreview` now fetches
       `LOG_PREVIEW_LINES + 1` rows via `findByJobIdOrderByIdDesc(jobId,
       Pageable)` and, only when the extra row comes back, runs a new
       `countByJobId` and prefixes `... N earlier lines omitted (T lines
@@ -824,6 +825,13 @@ when decisions change.
       `logLines.length > 10`, which a 10-line preview could never satisfy;
       with the marker line it fires exactly when truncated, so courses gets
       its link back for free on bumping. DESIGN.md §8 has the addendum.
+
+      **App bumps to v0.4.1** opened 2026-09-23 via parallel subagents:
+      fresh one-line PRs for citelines/courses/dining (their v0.4.0 bumps
+      had already merged), and scaffold #129 / frontiers #777 retargeted in
+      place from v0.4.0 (still open at the time). PR numbers/results are
+      in each repo; happycows stays as scoped in proj-happycows#336 and
+      will target v0.4.1 directly.
 
       **Frontiers' UI fix** (full-log page + course-scoped
       `GET /api/jobs/course/logs?courseId&jobId` endpoint, since the
