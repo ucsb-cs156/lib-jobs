@@ -20,4 +20,4 @@ repo_name: "TBD"
 repo: ucsb-cs156/lib-jobs
 owner: ucsb-cs156
 repo_name: lib-jobs
-pull_requests: [{"author":{"id":"MDQ6VXNlcjExMTkwMTc=","is_bot":false,"login":"pconrad","name":"Phill Conrad"},"headRefName":"pc-log-preview-marker","number":5,"title":"Prefix truncated log previews with an \"earlier lines omitted\" marker (v0.4.1)","url":"https://github.com/ucsb-cs156/lib-jobs/pull/5"}]
+pull_requests: []
