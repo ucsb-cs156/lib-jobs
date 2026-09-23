@@ -457,6 +457,21 @@ follow-up in happycows' own version-bump PR, not a blocker for this release).
 Single-job fetch (`getJobById`, `/logs/{id}`) is unaffected — full content,
 same as today.
 
+**v0.4.1 addendum (2026-09-23):** the preview turned out to be a foot-gun in
+practice — frontiers' `JobsTable` rendered the preview field as if it were
+the whole log, and Phill reported "log lines going missing" (nothing was
+missing; the first N-10 lines were simply not shipped). A truncated preview
+now starts with a marker line, `... 27 earlier lines omitted (37 lines
+total)`, so it is self-evidently a tail. Implementation: fetch
+`LOG_PREVIEW_LINES + 1` rows (one query in the common short-log case); only
+when that extra row comes back run `countByJobId` for the total. The marker
+is a separate first line on purpose: an app that splits the preview on `\n`
+(courses' `JobsTable` shows its "See entire log" link only when there are
+more than 10 lines — which, with a 10-line preview, could never fire) now
+sees 11 lines exactly when truncation happened. Apps still need a real
+"view full log" page backed by `/logs/{id}` (or an app-owned, scope-guarded
+equivalent for non-admin users, as frontiers' course jobs tab needs).
+
 **Filtering and full-field sort (Phill, 2026-07-13), folded into this same
 release since it touches the same endpoint:** `/paginated`'s sort allowlist
 widens to every sortable `Job` column (`id`, `jobName`, `status`,

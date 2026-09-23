@@ -51,8 +51,12 @@ public class JobsController {
           "createdAt",
           "updatedAt");
 
-  /** Number of trailing log lines included as a preview on list/paginated responses. */
-  public static final int LOG_PREVIEW_LINES = 10;
+  /**
+   * Number of trailing log lines included as a preview on list/paginated responses. The value lives
+   * on {@link JobService#LOG_PREVIEW_LINES} since v0.4.1; this alias is kept for callers that
+   * referenced it here.
+   */
+  public static final int LOG_PREVIEW_LINES = JobService.LOG_PREVIEW_LINES;
 
   @Autowired private JobsRepository jobsRepository;
 

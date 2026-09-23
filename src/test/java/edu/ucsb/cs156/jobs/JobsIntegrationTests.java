@@ -107,6 +107,35 @@ public class JobsIntegrationTests {
     assertNotNull(finished.getUpdatedAt());
   }
 
+  /**
+   * Real-database check of the preview's truncation marker (v0.4.1): the derived query with a
+   * {@code Pageable} and the {@code COUNT} both have to actually work against the schema, which the
+   * mocked-repository unit tests cannot show.
+   */
+  @Test
+  public void getJobLogPreview_marks_how_many_earlier_lines_it_omitted() {
+    // count(12) logs i=0..i=11 plus "Goodbye": 13 lines, 3 more than the preview keeps
+    TestJob testJob = TestJob.builder().count(12).sleepMs(1).build();
+
+    Job launched = jobService.runAsJob(testJob);
+    Job finished = awaitFinished(launched.getId());
+
+    String preview = jobService.getJobLogPreview(finished.getId());
+    assertEquals(
+        "... 3 earlier lines omitted (13 lines total)\n"
+            + "Hello World! i=3\nHello World! i=4\nHello World! i=5\nHello World! i=6\n"
+            + "Hello World! i=7\nHello World! i=8\nHello World! i=9\nHello World! i=10\n"
+            + "Hello World! i=11\nGoodbye from TestJob!",
+        preview);
+    assertEquals(13, jobService.getJobLogs(finished.getId()).split("\n").length);
+
+    // a short log is passed through untouched, no marker
+    Job shortJob = jobService.runAsJob(TestJob.builder().count(1).sleepMs(1).build());
+    awaitFinished(shortJob.getId());
+    assertEquals(
+        "Hello World! i=0\nGoodbye from TestJob!", jobService.getJobLogPreview(shortJob.getId()));
+  }
+
   @Test
   public void failing_job_ends_in_error_status_with_exception_in_log() {
     TestJob testJob = TestJob.builder().fail(true).build();
