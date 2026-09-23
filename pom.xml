@@ -15,7 +15,7 @@
        depend on com.github.ucsb-cs156:lib-jobs:vX.Y.Z -->
   <groupId>edu.ucsb.cs156</groupId>
   <artifactId>lib-jobs</artifactId>
-  <version>0.1.0</version>
+  <version>0.4.0</version>
   <packaging>jar</packaging>
 
   <name>lib-jobs</name>

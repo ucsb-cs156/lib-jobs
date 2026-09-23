@@ -33,7 +33,7 @@ survey of the existing implementations, decoupling decisions, publishing setup
 <dependency>
   <groupId>com.github.ucsb-cs156</groupId>
   <artifactId>lib-jobs</artifactId>
-  <version>v0.1.0</version>
+  <version>v0.4.0</version>
 </dependency>
 ```
 
