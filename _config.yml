@@ -20,4 +20,4 @@ repo_name: "TBD"
 repo: ucsb-cs156/lib-jobs
 owner: ucsb-cs156
 repo_name: lib-jobs
-pull_requests: []
+pull_requests: [{"author":{"id":"MDQ6VXNlcjExMTkwMTc=","is_bot":false,"login":"pconrad","name":"Phill Conrad"},"headRefName":"pc-status-happycows-v0.4.0","number":6,"title":"Document happycows on v0.4.0 (proj-happycows#338) and refresh STATUS.md","url":"https://github.com/ucsb-cs156/lib-jobs/pull/6"}]
